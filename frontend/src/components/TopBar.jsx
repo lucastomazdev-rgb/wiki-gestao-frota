@@ -1,12 +1,11 @@
 import React from 'react';
-import { Menu, Search, ChevronRight } from 'lucide-react';
+import { Menu, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function TopBar({ 
   onToggleMobileSidebar, 
   currentTab, 
-  breadcrumbTitle, 
-  onQuickSearchClick 
+  breadcrumbTitle
 }) {
   const { user } = useAuth();
 
@@ -61,19 +60,6 @@ export default function TopBar({
 
       {/* Action shortcuts */}
       <div className="flex items-center gap-3 shrink-0">
-        {currentTab !== 'search' && (
-          <button
-            onClick={onQuickSearchClick}
-            className="flex items-center gap-2.5 px-3.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-slate-300 hover:text-white transition-all cursor-pointer shadow-xs"
-          >
-            <Search size={14} className="text-red-400" />
-            <span className="hidden sm:inline font-sans text-xs">Pesquisar documentação...</span>
-            <kbd className="hidden lg:inline bg-slate-800 px-2 py-0.5 text-[9px] font-mono text-slate-400 rounded-full border border-white/10">
-              Ctrl+K
-            </kbd>
-          </button>
-        )}
-
         {/* System indicator */}
         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-950/30 border border-emerald-500/20 rounded-full text-[10px] font-mono text-emerald-400 font-semibold shadow-xs">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />

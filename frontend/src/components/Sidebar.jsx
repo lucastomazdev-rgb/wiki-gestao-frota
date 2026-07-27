@@ -2,7 +2,6 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
   BookOpen, 
-  Search, 
   Download, 
   Shield, 
   LogOut, 
@@ -38,7 +37,6 @@ export default function Sidebar({
 
   const navItems = [
     { key: 'home', label: 'Wiki', icon: BookOpen, badge: null },
-    { key: 'search', label: 'Buscar', icon: Search, badge: null },
     { key: 'downloads', label: 'Arquivos', icon: Download, badge: 'PDF' },
   ];
 

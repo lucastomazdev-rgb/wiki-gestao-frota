@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Search, Download, Shield } from 'lucide-react';
+import { BookOpen, Download, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 
@@ -19,17 +19,6 @@ export default function Footer({ currentTab, setCurrentTab }) {
       >
         <BookOpen size={20} />
         <span className="text-[10px] font-mono uppercase tracking-wider">Wiki</span>
-      </motion.button>
-
-      <motion.button
-        whileTap={{ scale: 0.9 }}
-        onClick={() => setCurrentTab('search')}
-        className={`flex flex-col items-center gap-0.5 py-1 ${
-          currentTab === 'search' ? 'text-brand-lime font-bold' : 'text-brand-muted hover:text-brand-text'
-        }`}
-      >
-        <Search size={20} />
-        <span className="text-[10px] font-mono uppercase tracking-wider">Buscar</span>
       </motion.button>
 
       <motion.button

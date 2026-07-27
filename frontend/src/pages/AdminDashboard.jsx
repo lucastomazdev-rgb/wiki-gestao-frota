@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../context/AuthContext';
-import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield } from 'lucide-react';
+import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUpdated }) {
@@ -10,7 +10,8 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  const [activeSubTab, setActiveSubTab] = useState('articles'); // 'articles' | 'categories'
+  const [activeSubTab, setActiveSubTab] = useState('articles'); // 'articles' | 'categories' | 'guide'
+  const [showMarkdownGuide, setShowMarkdownGuide] = useState(true);
   
   // Article Form State
   const [editingArticleId, setEditingArticleId] = useState(null);
@@ -20,6 +21,14 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
   const [articleVideo, setArticleVideo] = useState('');
   const [articleDownload, setArticleDownload] = useState('');
   const [showArticleForm, setShowArticleForm] = useState(false);
+
+  const insertMarkdownSnippet = (snippet) => {
+    setArticleContent((prev) => {
+      if (!prev) return snippet;
+      return `${prev}\n\n${snippet}`;
+    });
+    setShowArticleForm(true);
+  };
 
   // Category Form State
   const [editingCategoryId, setEditingCategoryId] = useState(null);
@@ -243,7 +252,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   type="text"
                   value={articleTitle}
                   onChange={(e) => setArticleTitle(e.target.value)}
-                  placeholder="Ex: Instalação física do Rastreador Maxtrack MXT-142"
+                  placeholder="Ex: Guia de operação da frota e manutenção"
                   className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
                   required
                 />
@@ -268,14 +277,153 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
             </div>
 
             <div>
-              <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
-                Conteúdo Markdown *
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-mono text-slate-400 uppercase">
+                  Conteúdo Markdown *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowMarkdownGuide(!showMarkdownGuide)}
+                  className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 bg-cyan-950/30 border border-cyan-500/20 px-3 py-1 rounded-full transition-all cursor-pointer"
+                >
+                  <Sparkles size={13} />
+                  <span>{showMarkdownGuide ? 'Ocultar Guia de Formatação' : 'Ver Guia de Formatação (Markdown)'}</span>
+                  {showMarkdownGuide ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+              </div>
+
+              {showMarkdownGuide && (
+                <div className="mb-4 p-4 bg-slate-800/80 border border-cyan-500/30 rounded-2xl space-y-3 shadow-inner">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <span className="text-xs font-mono text-cyan-400 font-bold uppercase flex items-center gap-2">
+                      <HelpCircle size={15} /> Como estruturar uma postagem bonita e profissional:
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">Clique nos exemplos abaixo para inserir no artigo</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                    {/* Item 1 */}
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">1. Títulos e Seções</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">##</code> para seções e <code className="text-cyan-300">###</code> para sub-tópicos.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                          ## 1. Visão Geral<br />
+                          ### 1.1 Requisitos
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => insertMarkdownSnippet('## 1. Visão Geral da Operação\n\nDescreva os detalhes principais aqui...\n\n### 1.1 Ferramentas Necessárias\n- Item 1\n- Item 2')}
+                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                      >
+                        + Inserir Estrutura de Títulos
+                      </button>
+                    </div>
+
+                    {/* Item 2 */}
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">2. Negrito & Destaques</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">**texto**</code> para destacar palavras-chave essenciais.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                          **Passo Crítico:** Tensão de **12V**.
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => insertMarkdownSnippet('**IMPORTANTE:** Certifique-se de que a **ignição** esteja desligada antes de iniciar.')}
+                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                      >
+                        + Inserir Exemplo Negrito
+                      </button>
+                    </div>
+
+                    {/* Item 3 */}
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">3. Listas e Passos</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use numeração <code className="text-cyan-300">1. 2. 3.</code> para instruções ordenadas.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                          1. Desligar a bateria<br />
+                          2. Conectar o rastreador
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => insertMarkdownSnippet('### Passos de Instalação:\n1. Desligar a chave geral do veículo.\n2. Conectar o chicote de alimentação principal.\n3. Realizar o teste de sinal.')}
+                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                      >
+                        + Inserir Passo a Passo
+                      </button>
+                    </div>
+
+                    {/* Item 4 */}
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">4. Caixas de Aviso</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">&gt;</code> para criar blocos de alerta sobressalentes.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                          &gt; ⚠️ **ATENÇÃO:** Perigo de curto!
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => insertMarkdownSnippet('> ⚠️ **AVISO DE SEGURANÇA:**\n> Nunca efetue emendas sem utilizar fita termo retrátil ou isolante de alta fusão.')}
+                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                      >
+                        + Inserir Caixa de Alerta
+                      </button>
+                    </div>
+
+                    {/* Item 5 */}
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">5. Comandos & SMS</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">```</code> para comandos de configuração técnicos.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                          ```<br />
+                          SETIP 192.168.1.1 5000<br />
+                          ```
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => insertMarkdownSnippet('```\nComando SMS: SETIP 10.0.0.1 8080\nResposta Esperada: OK SETIP\n```')}
+                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                      >
+                        + Inserir Bloco de Código
+                      </button>
+                    </div>
+
+                    {/* Item 6 */}
+                    <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">6. Tabelas de Fiação</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Organize pinos e cores de fios em tabelas limpas.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                          | Sinal | Cor | Volts |<br />
+                          | --- | --- | --- |<br />
+                          | Pós-Chave | Laranja | +12V |
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => insertMarkdownSnippet('| Sinal | Cor do Fio | Tensão | Observação |\n| --- | --- | --- | --- |\n| Positivo (+) | Vermelho | 12V/24V | Direto da Bateria |\n| Pós-Chave (IGN) | Laranja | 12V | Ativo na Chave |\n| Linha Can (H) | Amarelo | 2.5V | Tráfego de Dados |')}
+                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                      >
+                        + Inserir Tabela de Fiação
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={articleContent}
                 onChange={(e) => setArticleContent(e.target.value)}
-                placeholder="Insira as instruções em Markdown..."
-                rows={10}
+                placeholder="Insira as instruções em Markdown... Ex: ## 1. Visão Geral da Operação..."
+                rows={12}
                 className="w-full bg-slate-800/60 border border-white/10 text-white text-xs p-4 rounded-xl outline-none focus:border-red-500 font-mono leading-relaxed"
                 required
               />
@@ -404,9 +552,17 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
             >
               Gerenciar Categorias ({categories.length})
             </button>
+            <button
+              onClick={() => setActiveSubTab('guide')}
+              className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all flex items-center gap-1.5 ${
+                activeSubTab === 'guide' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles size={14} /> Guia de Formatação (Markdown)
+            </button>
           </div>
 
-          {activeSubTab === 'articles' ? (
+          {activeSubTab === 'articles' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-mono text-slate-400">LISTAGEM DE TUTORIAIS CADASTRADOS</span>
@@ -453,7 +609,9 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {activeSubTab === 'categories' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-mono text-slate-400">LISTAGEM DE CATEGORIAS</span>
@@ -495,6 +653,131 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeSubTab === 'guide' && (
+            <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl space-y-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div>
+                  <h3 className="text-base font-mono text-cyan-400 font-bold uppercase flex items-center gap-2">
+                    <Sparkles size={18} /> Manual de Formatação de Postagens (Markdown)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 font-sans">
+                    Utilize este guia rápido para formatar manuais, esquemas elétricos e procedimentos de frota com excelente legibilidade.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowArticleForm(true);
+                  }}
+                  className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 text-white px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <Plus size={15} /> Criar Postagem
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300">
+                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">1. Títulos e Subtítulos</h4>
+                  <p>Inicie a linha com <code className="text-cyan-300">##</code> para criar seções numeradas ou temáticas.</p>
+                  <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
+{`## 1. Introdução ao Procedimento
+### 1.1 Ferramentas Necessárias`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSnippet('## 1. Visão Geral da Operação\n\nDescreva os detalhes principais aqui...')}
+                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    + Usar este modelo no novo tutorial
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">2. Destaques em Negrito</h4>
+                  <p>Envolva os termos essenciais entre <code className="text-cyan-300">**duplos asteriscos**</code> para facilitar a leitura dinâmica.</p>
+                  <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
+{`**AVISO:** Verificar se o **chicote principal** está desenergizado.`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSnippet('**IMPORTANTE:** Certifique-se de que a **ignição** esteja desligada antes de iniciar.')}
+                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    + Usar este modelo no novo tutorial
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">3. Listas Numéricas (Passos)</h4>
+                  <p>Para instruções sequenciais de montagem ou teste, utilize números seguidos de ponto <code className="text-cyan-300">1. 2. 3.</code>.</p>
+                  <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
+{`1. Retirar o painel frontal
+2. Identificar os fios pós-chave (12V)
+3. Conectar os conectores selados`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSnippet('### Passos de Instalação:\n1. Desligar a chave geral do veículo.\n2. Conectar o chicote de alimentação principal.\n3. Realizar o teste de sinal.')}
+                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    + Usar este modelo no novo tutorial
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">4. Blocos de Aviso / Alerta</h4>
+                  <p>Coloque o símbolo <code className="text-cyan-300">&gt;</code> no início da linha para destacar regras de segurança da frota.</p>
+                  <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
+{`> ⚠️ **PROCEDIMENTO CRÍTICO:**
+> Não cortar a fiação original do veículo em hipótese alguma.`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSnippet('> ⚠️ **AVISO DE SEGURANÇA:**\n> Nunca efetue emendas sem utilizar fita termo retrátil ou isolante de alta fusão.')}
+                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    + Usar este modelo no novo tutorial
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">5. Comandos Técnicos e Parâmetros</h4>
+                  <p>Envolva trechos de comandos SMS ou parâmetros de rastreadores entre crases triplas <code className="text-cyan-300">```</code>.</p>
+                  <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
+{`\`\`\`
+SMS: SETIP 192.168.1.1 5000
+RESPOSTA: SETIP OK
+\`\`\``}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSnippet('```\nComando SMS: SETIP 10.0.0.1 8080\nResposta Esperada: OK SETIP\n```')}
+                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    + Usar este modelo no novo tutorial
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">6. Tabela de Fiação e Sinais</h4>
+                  <p>Organize cores de fios e tensões utilizando a sintaxe de tabelas Markdown.</p>
+                  <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
+{`| Sinal | Cor do Fio | Tensão |
+| --- | --- | --- |
+| Positivo (+) | Vermelho | 12V/24V |
+| Pós-Chave | Laranja | 12V |`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownSnippet('| Sinal | Cor do Fio | Tensão | Observação |\n| --- | --- | --- | --- |\n| Positivo (+) | Vermelho | 12V/24V | Direto da Bateria |\n| Pós-Chave (IGN) | Laranja | 12V | Ativo na Chave |\n| Linha Can (H) | Amarelo | 2.5V | Tráfego de Dados |')}
+                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    + Usar este modelo no novo tutorial
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

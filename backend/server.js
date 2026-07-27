@@ -10,6 +10,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { protect, restrictTo } from './middleware/auth.js';
 
+dotenv.config();
+
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,6 +27,9 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 app.use(helmet({
   contentSecurityPolicy: false // Permitir customização de recursos em dev/prod
 }));
+
+// 🌐 Suporte a Proxy Reverso (Render / Vercel / Cloudflare) para rate-limit e cookies seguros
+app.set('trust proxy', 1);
 
 // 🔒 SEO Privado - Forçar cabeçalho X-Robots-Tag em todas as respostas da API
 app.use((req, res, next) => {
@@ -341,10 +346,10 @@ app.get('/api/articles', protect, async (req, res, next) => {
       where.categoryId = categoryId;
     }
 
-    if (search) {
+    if (search && search.trim()) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { contentMarkdown: { contains: search, mode: 'insensitive' } }
+        { title: { contains: search.trim(), mode: 'insensitive' } },
+        { contentMarkdown: { contains: search.trim(), mode: 'insensitive' } }
       ];
     }
 

@@ -17,12 +17,12 @@ export const protect = async (req, res, next) => {
     }
 
     const secret = process.env.JWT_SECRET;
-    if (!secret && process.env.NODE_ENV === 'production') {
+    if (!secret) {
       throw new Error('JWT_SECRET não está configurado nas variáveis de ambiente.');
     }
 
     // Verify token
-    const decoded = jwt.verify(token, secret || 'dev-fallback-secret-key-change-in-production');
+    const decoded = jwt.verify(token, secret);
 
     // Attach user payload to request
     req.user = {

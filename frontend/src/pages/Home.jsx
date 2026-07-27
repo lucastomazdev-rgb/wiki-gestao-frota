@@ -74,13 +74,66 @@ export default function Home({
     }
   }, [forceSearchMode]);
 
+  const normalizeText = (str) => {
+    if (!str) return '';
+    return str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  };
+
+  const getSnippet = (contentMarkdown, query) => {
+    if (!contentMarkdown || !query.trim()) return null;
+    
+    const plainText = contentMarkdown
+      .replace(/[#*`_~>[\]()!]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const normalizedPlain = normalizeText(plainText);
+    const queryTokens = normalizeText(query).split(/\s+/).filter(Boolean);
+
+    if (queryTokens.length === 0) return null;
+
+    let matchIndex = -1;
+    for (const token of queryTokens) {
+      const idx = normalizedPlain.indexOf(token);
+      if (idx !== -1) {
+        matchIndex = idx;
+        break;
+      }
+    }
+
+    if (matchIndex === -1) return null;
+
+    const start = Math.max(0, matchIndex - 35);
+    const end = Math.min(plainText.length, matchIndex + 90);
+    
+    let snippet = plainText.slice(start, end);
+    if (start > 0) snippet = '...' + snippet;
+    if (end < plainText.length) snippet = snippet + '...';
+
+    return snippet;
+  };
+
   const filteredArticles = articles.filter(article => {
     const matchesCategory = selectedCategoryId ? article.categoryId === selectedCategoryId : true;
-    const matchesSearch = searchQuery.trim() !== '' 
-      ? article.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        article.contentMarkdown.toLowerCase().includes(searchQuery.toLowerCase())
-      : true;
-    return matchesCategory && matchesSearch;
+    if (!matchesCategory) return false;
+    if (!searchQuery.trim()) return true;
+
+    const normalizedQuery = normalizeText(searchQuery);
+    const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+
+    const titleNorm = normalizeText(article.title);
+    const catNorm = normalizeText(article.category?.name || '');
+    const contentNorm = normalizeText(article.contentMarkdown || '');
+
+    const fullTextNorm = `${titleNorm} ${catNorm} ${contentNorm}`;
+
+    const exactMatch = fullTextNorm.includes(normalizedQuery);
+    const allTokensMatch = queryTokens.length > 0 && queryTokens.every(token => fullTextNorm.includes(token));
+
+    return exactMatch || allTokensMatch;
   });
 
   const getCategoryArticleCount = (catId) => {
@@ -141,7 +194,7 @@ export default function Home({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar tutoriais, rastreadores (Maxtrack, Scuti) ou manuais de fiação..."
+            placeholder="Buscar tutoriais, manuais de operação ou procedimentos..."
             className="w-full bg-slate-900/60 backdrop-blur-md border border-white/10 text-white text-sm pl-12 pr-24 py-3.5 rounded-full outline-none focus:border-red-500/50 transition-all font-sans shadow-lg shadow-black/20"
           />
           {searchQuery && (
@@ -252,6 +305,13 @@ export default function Home({
                       <h3 className="text-base font-bold text-white mt-3 group-hover:text-red-400 transition-colors line-clamp-2 leading-snug">
                         {art.title}
                       </h3>
+
+                      {searchQuery.trim() && getSnippet(art.contentMarkdown, searchQuery) && (
+                        <p className="text-xs text-slate-300 mt-2.5 line-clamp-2 font-sans bg-white/5 p-2.5 rounded-xl border border-white/5 leading-relaxed">
+                          <span className="text-red-400 font-mono font-bold text-[10px] uppercase block mb-0.5">Trecho encontrado:</span>
+                          "{getSnippet(art.contentMarkdown, searchQuery)}"
+                        </p>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs font-mono text-slate-400 group-hover:text-white">

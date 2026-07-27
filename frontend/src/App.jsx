@@ -7,7 +7,7 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import ArticleDetail from './pages/ArticleDetail';
 import AdminDashboard from './pages/AdminDashboard';
-import { Download, FileText, ExternalLink, ShieldAlert, AlertCircle, RefreshCw } from 'lucide-react';
+import { Download, FileText, ExternalLink, ShieldAlert, AlertCircle, RefreshCw, FolderOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 function AppContent() {
@@ -36,28 +36,7 @@ function AppContent() {
   }, [user]);
 
   // Technical PDF manuals data for downloads tab
-  const technicalFiles = [
-    {
-      title: 'Esquema Elétrico - Rastreador Maxtrack MXT-142',
-      type: 'PDF / Diagrama de Fiação',
-      url: 'https://www.maxtrack.com.br/wp-content/uploads/2021/04/MXT142-Manual.pdf'
-    },
-    {
-      title: 'Manual de Operações da Plataforma Scuti',
-      type: 'PDF / Guia de Software',
-      url: 'https://docs.solarbr.com.br/manuais/scuti-tutorial.pdf'
-    },
-    {
-      title: 'Protocolo de Segurança para Bloqueio de Emergência',
-      type: 'PDF / Segurança Coca-Cola',
-      url: 'https://docs.solarbr.com.br/seguranca/bloqueio-frota.pdf'
-    },
-    {
-      title: 'Diagrama de Alimentação Pós-Chave - Mercedes-Benz Axor',
-      type: 'PNG / Instalação Física',
-      url: 'https://docs.solarbr.com.br/diagramas/MB-Axor-Chave.png'
-    }
-  ];
+  const technicalFiles = [];
 
   if (loading) {
     return (
@@ -120,7 +99,6 @@ function AppContent() {
           onToggleMobileSidebar={() => setMobileSidebarOpen(true)}
           currentTab={currentTab}
           breadcrumbTitle={selectedArticleTitle}
-          onQuickSearchClick={() => handleTabChange('search')}
         />
 
         <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 relative z-10">
@@ -176,32 +154,42 @@ function AppContent() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {technicalFiles.map((file, idx) => (
-                  <motion.a
-                    key={idx}
-                    whileHover={{ scale: 1.01, borderColor: 'var(--color-brand-lime)' }}
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-4 bg-brand-surface border border-brand-border rounded-xs flex flex-col justify-between group transition-all h-full"
-                  >
-                    <div>
-                      <span className="text-[9px] font-mono bg-brand-surface-light border border-brand-border text-brand-lime px-2 py-0.5 rounded-xs uppercase tracking-wider font-semibold">
-                        {file.type}
-                      </span>
-                      <h3 className="text-sm font-semibold text-white mt-3 group-hover:text-brand-lime transition-colors leading-snug">
-                        {file.title}
-                      </h3>
-                    </div>
-                    
-                    <div className="mt-4 pt-3 border-t border-brand-border/40 flex items-center justify-between text-xs font-mono text-brand-muted group-hover:text-brand-lime">
-                      <span>Download PDF</span>
-                      <Download size={16} className="shrink-0 transition-transform group-hover:translate-y-0.5" />
-                    </div>
-                  </motion.a>
-                ))}
-              </div>
+              {technicalFiles.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {technicalFiles.map((file, idx) => (
+                    <motion.a
+                      key={idx}
+                      whileHover={{ scale: 1.01, borderColor: 'var(--color-brand-lime)' }}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-4 bg-brand-surface border border-brand-border rounded-xs flex flex-col justify-between group transition-all h-full"
+                    >
+                      <div>
+                        <span className="text-[9px] font-mono bg-brand-surface-light border border-brand-border text-brand-lime px-2 py-0.5 rounded-xs uppercase tracking-wider font-semibold">
+                          {file.type}
+                        </span>
+                        <h3 className="text-sm font-semibold text-white mt-3 group-hover:text-brand-lime transition-colors leading-snug">
+                          {file.title}
+                        </h3>
+                      </div>
+                      
+                      <div className="mt-4 pt-3 border-t border-brand-border/40 flex items-center justify-between text-xs font-mono text-brand-muted group-hover:text-brand-lime">
+                        <span>Download PDF</span>
+                        <Download size={16} className="shrink-0 transition-transform group-hover:translate-y-0.5" />
+                      </div>
+                    </motion.a>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-16 px-4 text-center border border-dashed border-brand-border rounded-xs bg-brand-surface/40 my-8">
+                  <FolderOpen size={48} className="mx-auto text-brand-muted mb-3 opacity-60" />
+                  <h3 className="text-base font-semibold text-white font-display">Ainda não temos dados por aqui...</h3>
+                  <p className="text-xs text-brand-muted mt-1 font-mono">
+                    Nenhum arquivo ou documento técnico foi disponibilizado no momento.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </main>
