@@ -1,5 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const prisma = new PrismaClient({
   datasources: {
@@ -693,7 +696,7 @@ Este material tem como objetivo orientar os colaboradores na tratativa de **falh
 Todas as tratativas e dados de apoio estão centralizados na planilha oficial da operação:
 🔗 [Acessar Planilha Falhas Coca Cola (Google Sheets)](https://docs.google.com/spreadsheets/d/1_HFVfC1TMKLEc0TbsPTa6GnMqhNqcP_y8wWuVNKnKh4/edit?usp=sharing)
 
-![Estrutura de Abas da Planilha](/images/falhas/abas_planilha.png)
+![Estrutura da Planilha Falhas Coca Cola](/images/falhas/picture1_falhas.png)
 
 ### Descrição das Abas da Planilha:
 
@@ -717,7 +720,7 @@ Todas as tratativas e dados de apoio estão centralizados na planilha oficial da
 3. Clique no **Ícone Cinza** para filtrar os veículos sem comunicação.
 4. Clique em **"Exportar todos os dados"** para baixar a lista em formato Excel (\`.xlsx\`).
 
-![Extração de Falhas no Vanguarda](/images/falhas/extracao_vanguarda.png)
+![Extração dos Veículos sem Comunicação no Vanguarda](/images/falhas/picture2_falhaseditado.png)
 
 ---
 
@@ -732,7 +735,7 @@ Todas as tratativas e dados de apoio estão centralizados na planilha oficial da
    - **\`GPRS / Última Transmissão\`** (Coluna D)
    - **\`BATERIA\`** (Coluna E)
 
-![Duplicação de Aba no Sheets](/images/falhas/duplicar_aba.png)
+![Preparação da Nova Aba na Planilha](/images/falhas/picture3_falhas.png)
 
 ---
 
@@ -785,8 +788,6 @@ Preencha a coluna Status de todas as linhas como: **\`Email enviado\`**.
 =SEERRO(ÍNDICE('Falhas 09.07'!L:L;CORRESP(A2;'Falhas 09.07'!A:A;0));"")
 \`\`\`
 
-![Fórmulas na Planilha](/images/falhas/formulas_sheets.png)
-
 ---
 
 ## 🔒 6. Trava de Valores (CTRL + C / CTRL + SHIFT + V) e Ordenação
@@ -797,8 +798,6 @@ Após o preenchimento de toda a tabela por fórmula:
 2. Digite **\`CTRL + C\`** para copiar.
 3. Em seguida, digite **\`CTRL + SHIFT + V\`** (para colar apenas os valores estáticos e remover as fórmulas).
 4. Ordene a coluna **Unidade (Coluna B)** de **A a Z** para manter tudo organizado por filial/regional.
-
-![Trava de Valores e Ordenação A-Z](/images/falhas/ordenacao_valores.png)
 
 ---
 
@@ -812,7 +811,9 @@ Com a planilha preenchida e organizada:
 4. Na tela do editor que se abrir, clique no botão **"Executar"**.
 5. Todos os e-mails serão disparados automaticamente com base na aba \`Pontos focais\`.
 
-![Execução do Disparo em Apps Script](/images/falhas/apps_script.png)
+![Disparo Automático de E-mails via Google Apps Script - Visualização Planilha](/images/falhas/picture4_falhas.png)
+
+![Disparo Automático de E-mails via Google Apps Script - Execução no Apps Script](/images/falhas/picture5_falhas.png)
 
 ---
 
