@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Outfit", sans-serif;
+  
+  --color-brand-bg: #0B0F19;
+  --color-brand-surface: rgba(15, 23, 42, 0.75);
+  --color-brand-surface-light: rgba(30, 41, 59, 0.65);
+  --color-brand-red: #EF4444;
+  --color-brand-red-hover: #DC2626;
+  --color-brand-blue: #0284C7;
+  --color-brand-cyan: #38BDF8;
+  --color-brand-emerald: #10B981;
+  --color-brand-border: rgba(255, 255, 255, 0.1);
+  --color-brand-text: #F8FAFC;
+  --color-brand-muted: #94A3B8;
+  
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-brand-bg);
+    color: var(--color-brand-text);
+    overflow-x: hidden;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(239, 68, 68, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(2, 132, 199, 0.08) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+  }
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-card-hover:hover {
+  background: rgba(30, 41, 59, 0.75);
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 12px 40px 0 rgba(239, 68, 68, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(11, 15, 25, 0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.6);
+}
+
+/* Markdown Rendering Custom Styles */
+.markdown-body {
+  line-height: 1.7;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  margin-top: 1.75rem;
+  margin-bottom: 0.85rem;
+  color: #FFFFFF;
+  font-family: var(--font-display);
+}
+.markdown-body h1 { 
+  font-size: 1.75rem; 
+  font-weight: 900;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
+}
+.markdown-body h2 { 
+  font-size: 1.35rem; 
+  border-left: 3px solid #EF4444; 
+  padding-left: 0.75rem;
+  border-radius: 2px;
+}
+.markdown-body h3 { 
+  font-size: 1.15rem; 
+  color: #F8FAFC;
+}
+.markdown-body p {
+  margin-bottom: 1.15rem;
+  color: #CBD5E1;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1.15rem;
+}
+.markdown-body ol li {
+  margin-bottom: 0.5rem;
+  color: #E2E8F0;
+}
+.markdown-body ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1.15rem;
+}
+.markdown-body ul li {
+  margin-bottom: 0.35rem;
+  color: #CBD5E1;
+}
+/* Highlight blocks */
+.markdown-body blockquote {
+  border-left: 4px solid #EF4444;
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.markdown-body blockquote p {
+  margin: 0;
+  color: #F8FAFC;
+  font-weight: 500;
+}
+
+/* Markdown Tables & Images Styling */
+.markdown-body table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5rem 0;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+.markdown-body th {
+  background: rgba(30, 41, 59, 0.85);
+  color: #F8FAFC;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.85rem 1.15rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 130px;
+  white-space: nowrap;
+}
+
+.markdown-body th:first-child,
+.markdown-body td:first-child {
+  min-width: 70px;
+}
+
+.markdown-body td {
+  padding: 0.85rem 1.15rem;
+  color: #CBD5E1;
+  font-size: 0.9rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.2s ease;
+  min-width: 130px;
+}
+
+.markdown-body tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown-body tr:hover td {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.markdown-body img {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 1.5rem 0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  max-width: 100%;
+  height: auto;
+}
+
+/* Markdown Code & Pre Styling */
+.markdown-body pre {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  color: #E2E8F0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875em;
+  background: rgba(255, 255, 255, 0.08);
+  color: #F8FAFC;
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
