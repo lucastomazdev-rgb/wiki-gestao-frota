@@ -1,17 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../context/AuthContext';
-import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book } from 'lucide-react';
+import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book, Users, UserPlus, ShieldCheck, UserCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUpdated }) {
   const [categories, setCategories] = useState([]);
   const [articles, setArticles] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  const [activeSubTab, setActiveSubTab] = useState('articles'); // 'articles' | 'categories' | 'guide'
+  const [activeSubTab, setActiveSubTab] = useState('articles'); // 'articles' | 'categories' | 'users' | 'guide'
   const [showMarkdownGuide, setShowMarkdownGuide] = useState(true);
+
+  // User Management State
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [userRole, setUserRole] = useState('USER');
+  const [userSubmitting, setUserSubmitting] = useState(false);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/users');
+      setUsers(res.data.data.users || []);
+    } catch (err) {
+      console.error('Erro ao carregar usuários:', err);
+    }
+  };
   
   // Article Form State
   const [editingArticleId, setEditingArticleId] = useState(null);
@@ -58,7 +76,51 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
   useEffect(() => {
     fetchData();
+    fetchUsers();
   }, []);
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!userName || !userEmail || !userPassword) {
+      setError('Preencha nome, e-mail e senha para cadastrar um novo usuário.');
+      return;
+    }
+    setUserSubmitting(true);
+    try {
+      await api.post('/auth/register', {
+        name: userName,
+        email: userEmail,
+        password: userPassword,
+        role: userRole
+      });
+      setSuccess(`Usuário ${userName} (${userEmail}) cadastrado com sucesso!`);
+      setUserName('');
+      setUserEmail('');
+      setUserPassword('');
+      setUserRole('USER');
+      setShowUserForm(false);
+      fetchUsers();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Falha ao cadastrar usuário.');
+    } finally {
+      setUserSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async (id, name) => {
+    if (!window.confirm(`Tem certeza que deseja remover o usuário "${name}"?`)) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.delete(`/users/${id}`);
+      setSuccess(`Usuário ${name} removido com sucesso.`);
+      fetchUsers();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erro ao deletar usuário.');
+    }
+  };
 
   const handleCreateOrUpdateArticle = async (e) => {
     e.preventDefault();
@@ -553,6 +615,14 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
               Gerenciar Categorias ({categories.length})
             </button>
             <button
+              onClick={() => setActiveSubTab('users')}
+              className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all flex items-center gap-1.5 ${
+                activeSubTab === 'users' ? 'border-red-500 text-red-400' : 'border-transparent text-slate-400 hover:text-white'
+              }`}
+            >
+              <Users size={14} /> Gerenciar Usuários ({users.length})
+            </button>
+            <button
               onClick={() => setActiveSubTab('guide')}
               className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all flex items-center gap-1.5 ${
                 activeSubTab === 'guide' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-white'
@@ -653,6 +723,143 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeSubTab === 'users' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">GESTÃO DE USUÁRIOS E TÉCNICOS CADASTRADOS</span>
+                <button
+                  onClick={() => setShowUserForm(!showUserForm)}
+                  className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-4 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 shadow-md shadow-red-950/30 transition-all cursor-pointer"
+                >
+                  <UserPlus size={16} /> {showUserForm ? 'Cancelar' : 'Novo Usuário'}
+                </button>
+              </div>
+
+              {showUserForm && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-6 bg-slate-900/80 border border-white/10 rounded-3xl space-y-4 shadow-xl"
+                >
+                  <h3 className="text-sm font-mono text-red-400 font-bold uppercase flex items-center gap-2">
+                    <UserPlus size={18} /> Cadastrar Novo Usuário / Técnico
+                  </h3>
+                  <form onSubmit={handleCreateUser} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">Nome Completo *</label>
+                        <input
+                          type="text"
+                          value={userName}
+                          onChange={(e) => setUserName(e.target.value)}
+                          placeholder="Ex: Carlos Andrade"
+                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-sans"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">E-mail *</label>
+                        <input
+                          type="email"
+                          value={userEmail}
+                          onChange={(e) => setUserEmail(e.target.value)}
+                          placeholder="carlos@solar.com"
+                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-sans"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">Senha Inicial *</label>
+                        <input
+                          type="password"
+                          value={userPassword}
+                          onChange={(e) => setUserPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-sans"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">Nível de Acesso</label>
+                        <select
+                          value={userRole}
+                          onChange={(e) => setUserRole(e.target.value)}
+                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-mono"
+                        >
+                          <option value="USER">USER (Técnico / Consulta)</option>
+                          <option value="ADMIN">ADMIN (Supervisor / Administrador)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowUserForm(false)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-mono uppercase cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={userSubmitting}
+                        className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-xl text-xs font-mono font-bold uppercase shadow-md shadow-red-950/30 cursor-pointer disabled:opacity-50"
+                      >
+                        {userSubmitting ? 'Cadastrando...' : 'Cadastrar Usuário'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
+
+              {/* Users List Table */}
+              <div className="bg-slate-900/60 border border-white/10 rounded-3xl overflow-hidden shadow-xl">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-slate-800/40 text-[11px] font-mono uppercase text-slate-400">
+                      <th className="py-3.5 px-6">Nome</th>
+                      <th className="py-3.5 px-6">E-mail</th>
+                      <th className="py-3.5 px-6">Nível de Acesso</th>
+                      <th className="py-3.5 px-6 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-sm font-sans text-slate-200">
+                    {users.map((u) => (
+                      <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                        <td className="py-3.5 px-6 font-medium text-white flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-mono font-bold text-red-400">
+                            {u.name ? u.name[0].toUpperCase() : 'U'}
+                          </div>
+                          <span>{u.name}</span>
+                        </td>
+                        <td className="py-3.5 px-6 font-mono text-xs text-slate-300">{u.email}</td>
+                        <td className="py-3.5 px-6 font-mono text-xs">
+                          {u.role === 'ADMIN' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-950/80 border border-red-500/30 text-red-400 font-bold text-[10px]">
+                              <ShieldCheck size={12} /> ADMIN
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-950/80 border border-sky-500/30 text-sky-400 font-bold text-[10px]">
+                              <UserCheck size={12} /> TÉCNICO
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-6 text-right">
+                          <button
+                            onClick={() => handleDeleteUser(u.id, u.name)}
+                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
+                            title="Excluir Usuário"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

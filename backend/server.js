@@ -113,6 +113,7 @@ app.post('/api/auth/register', async (req, res, next) => {
     const validatedData = registerSchema.parse(req.body);
 
     const userCount = await prisma.user.count();
+    let isRequestFromAdmin = false;
     
     // Se já existirem usuários na base, verificar se a requisição é feita por um ADMIN autenticado
     if (userCount > 0) {
@@ -136,6 +137,7 @@ app.post('/api/auth/register', async (req, res, next) => {
             message: 'Apenas administradores podem cadastrar novos usuários no sistema.'
           });
         }
+        isRequestFromAdmin = true;
       } catch (err) {
         return res.status(401).json({
           status: 'error',
@@ -166,20 +168,21 @@ app.post('/api/auth/register', async (req, res, next) => {
       }
     });
 
-    // Sign JWT
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    // Se a requisição NÃO veio de um Admin já logado (ex: primeiro cadastro), define o cookie de login
+    if (!isRequestFromAdmin) {
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role, name: user.name },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+      );
 
-    // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
-    });
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
+      });
+    }
 
     res.status(201).json({
       status: 'success',
@@ -259,6 +262,41 @@ app.get('/api/auth/me', protect, (req, res) => {
       user: req.user
     }
   });
+});
+
+// --- USER MANAGEMENT ROUTES (ADMIN ONLY) ---
+
+// List all users
+app.get('/api/users', protect, restrictTo('ADMIN'), async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.status(200).json({ status: 'success', data: { users } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete a user
+app.delete('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (id === req.user.id) {
+      return res.status(400).json({ status: 'error', message: 'Você não pode excluir sua própria conta enquanto estiver conectado.' });
+    }
+    await prisma.user.delete({ where: { id } });
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
 });
 
 
