@@ -5,6 +5,8 @@ import { ArrowLeft, Video, Download, Eye, Calendar, AlertCircle, List, CheckCirc
 import { motion } from 'framer-motion';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { ArticleSkeleton } from '../components/ui/Skeleton';
+import ScrollToTop from '../components/ui/ScrollToTop';
 
 export default function ArticleDetail({ articleSlug, onBack }) {
   const [article, setArticle] = useState(null);
@@ -128,25 +130,21 @@ export default function ArticleDetail({ articleSlug, onBack }) {
   };
 
   if (loading) {
-    return (
-      <div className="py-24 flex flex-col items-center justify-center gap-3">
-        <div className="h-8 w-8 border-2 border-white/10 border-t-red-500 rounded-full animate-spin" />
-        <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">Carregando tutorial...</span>
-      </div>
-    );
+    return <ArticleSkeleton />;
   }
+
 
   if (error || !article) {
     return (
       <div className="py-12 max-w-lg mx-auto">
-        <div className="p-6 bg-red-950/30 border border-red-500/30 text-red-300 text-xs rounded-2xl flex items-start gap-3 backdrop-blur-md">
-          <AlertCircle size={20} className="shrink-0 mt-0.5" />
+        <div className="p-6 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-2xl flex items-start gap-3 backdrop-blur-md">
+          <AlertCircle size={20} className="shrink-0 mt-0.5 text-amber-400" />
           <div>
-            <p className="font-semibold font-mono uppercase">Erro de Carregamento</p>
+            <p className="font-semibold font-sans">Erro de Carregamento</p>
             <p className="mt-1 leading-relaxed">{error || 'Artigo não localizado.'}</p>
             <button
               onClick={onBack}
-              className="mt-4 bg-white/5 border border-white/10 text-white hover:text-red-400 font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-full"
+              className="mt-4 bg-white/5 border border-white/10 text-white hover:text-amber-400 font-sans text-xs font-medium px-4 py-2 rounded-full cursor-pointer transition-colors"
             >
               Voltar para Início
             </button>
@@ -166,13 +164,13 @@ export default function ArticleDetail({ articleSlug, onBack }) {
           whileHover={{ x: -2 }}
           whileTap={{ scale: 0.98 }}
           onClick={onBack}
-          className="flex items-center gap-2 bg-slate-900/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full text-xs font-mono text-slate-300 hover:text-white hover:border-red-500/40 transition-all cursor-pointer shadow-xs"
+          className="flex items-center gap-2 bg-slate-900/70 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full text-xs font-sans text-slate-300 hover:text-white hover:border-amber-500/40 transition-all cursor-pointer shadow-xs"
         >
           <ArrowLeft size={16} />
-          <span className="uppercase font-bold tracking-wider">Voltar para Tutoriais</span>
+          <span className="font-medium">Voltar para Tutoriais</span>
         </motion.button>
         
-        <span className="text-xs bg-red-950/40 text-red-400 border border-red-500/30 px-3.5 py-1 rounded-full font-mono uppercase tracking-wider font-bold">
+        <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3.5 py-1 rounded-full font-sans font-medium">
           {article.category?.name}
         </span>
       </div>
@@ -182,8 +180,8 @@ export default function ArticleDetail({ articleSlug, onBack }) {
         {/* Table of Contents Index (Desktop Sidebar) */}
         {toc.length > 0 && (
           <div className="hidden lg:block space-y-3 col-span-1">
-            <div className="sticky top-24 bg-slate-900/60 backdrop-blur-md border border-white/10 p-5 rounded-2xl shadow-lg">
-              <h4 className="text-xs font-mono text-red-400 uppercase tracking-widest font-bold flex items-center gap-2 border-b border-white/10 pb-3">
+            <div className="sticky top-24 bg-slate-900/70 backdrop-blur-md border border-white/10 p-5 rounded-2xl shadow-lg">
+              <h4 className="text-xs font-sans text-amber-400 font-semibold flex items-center gap-2 border-b border-white/10 pb-3">
                 <List size={15} />
                 Nesta Página
               </h4>
@@ -204,21 +202,21 @@ export default function ArticleDetail({ articleSlug, onBack }) {
         )}
 
         {/* Article Body Container */}
-        <article className={`space-y-6 bg-slate-900/60 backdrop-blur-xl border border-white/10 p-6 sm:p-10 rounded-3xl shadow-xl ${
+        <article className={`space-y-6 bg-slate-900/70 backdrop-blur-xl border border-white/10 p-6 sm:p-10 rounded-3xl shadow-xl ${
           toc.length > 0 ? 'lg:col-span-3' : 'lg:col-span-4'
         }`}>
           {/* Article Title & Metadata */}
           <div className="border-b border-white/10 pb-6">
-            <h1 className="text-2xl sm:text-3xl text-white font-display font-black leading-tight tracking-wide">
+            <h1 className="text-2xl sm:text-3xl text-white font-sans font-bold leading-tight tracking-tight">
               {article.title}
             </h1>
-            <div className="mt-4 flex flex-wrap gap-3 text-xs font-mono text-slate-400">
+            <div className="mt-4 flex flex-wrap gap-3 text-xs font-sans text-slate-400">
               <span className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
-                <Calendar size={13} className="text-red-400" />
+                <Calendar size={13} className="text-amber-400" />
                 Atualizado em {new Date(article.updatedAt).toLocaleDateString('pt-BR')}
               </span>
               <span className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
-                <Eye size={13} className="text-red-400" />
+                <Eye size={13} className="text-amber-400" />
                 {article.viewCount} visualizações
               </span>
             </div>
@@ -227,7 +225,7 @@ export default function ArticleDetail({ articleSlug, onBack }) {
           {/* High Resolution Gallery */}
           {images.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-xs font-mono text-red-400 uppercase tracking-widest font-bold flex items-center gap-2">
+              <h3 className="text-xs font-sans text-amber-400 font-semibold flex items-center gap-2">
                 <CheckCircle size={15} />
                 Galeria de Instalação Física & Esquemas
               </h3>
@@ -244,7 +242,7 @@ export default function ArticleDetail({ articleSlug, onBack }) {
           {/* Video Player */}
           {videoEmbed && (
             <div className="space-y-3 pt-6 border-t border-white/10">
-              <h3 className="text-xs font-mono text-red-400 uppercase tracking-widest font-bold flex items-center gap-2">
+              <h3 className="text-xs font-sans text-amber-400 font-semibold flex items-center gap-2">
                 <Video size={16} />
                 Vídeo Demonstrativo de Instalação
               </h3>
@@ -263,7 +261,7 @@ export default function ArticleDetail({ articleSlug, onBack }) {
           {/* Downloads Area */}
           {article.fileDownloadUrl && (
             <div className="space-y-3 pt-6 border-t border-white/10">
-              <h3 className="text-xs font-mono text-red-400 uppercase tracking-widest font-bold flex items-center gap-2">
+              <h3 className="text-xs font-sans text-amber-400 font-semibold flex items-center gap-2">
                 <Download size={16} />
                 Esquemas Elétricos & Manuais em PDF
               </h3>
@@ -272,22 +270,25 @@ export default function ArticleDetail({ articleSlug, onBack }) {
                 href={article.fileDownloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-5 bg-white/5 border border-white/10 border-l-4 border-l-red-500 rounded-2xl hover:bg-white/10 transition-all group shadow-md"
+                className="flex items-center justify-between p-5 bg-white/5 border border-white/10 border-l-4 border-l-amber-500 rounded-2xl hover:bg-white/10 transition-all group shadow-md"
               >
                 <div className="min-w-0 pr-4">
-                  <p className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                  <p className="text-sm font-semibold text-white group-hover:text-amber-400 transition-colors">
                     Fazer download do manual técnico em PDF
                   </p>
-                  <p className="text-xs font-mono text-slate-400 uppercase tracking-wider mt-1">
+                  <p className="text-xs font-sans text-slate-400 mt-1">
                     Documento oficial Solar Coca-Cola
                   </p>
                 </div>
-                <Download size={20} className="text-slate-400 group-hover:text-red-400 shrink-0 transition-transform group-hover:translate-y-0.5" />
+                <Download size={20} className="text-slate-400 group-hover:text-amber-400 shrink-0 transition-transform group-hover:translate-y-0.5" />
               </motion.a>
             </div>
           )}
         </article>
       </div>
+
+      {/* Floating Scroll To Top Button */}
+      <ScrollToTop />
     </div>
   );
 }

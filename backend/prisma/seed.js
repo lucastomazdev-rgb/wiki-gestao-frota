@@ -77,6 +77,120 @@ async function main() {
   // 5. Criar Artigos de Exemplo
   await prisma.article.create({
     data: {
+      title: 'Cadastro de Pessoas',
+      slug: 'cadastro-de-pessoas',
+      categoryId: catCadastro.id,
+      contentMarkdown: `# Cadastro de Pessoas no Vanguarda
+
+Guia passo a passo para o cadastro, atualização e gestão de usuários (Condutores e Supervisores) na plataforma Vanguarda da operação Solar Coca-Cola, garantindo elegibilidade ao Ranking de Motoristas e acesso ao aplicativo mobile.
+
+---
+
+## 📌 1. Regras e Canais de Solicitação
+
+> 🛑 **REGRA CRÍTICA DE SEGURANÇA E PROCESSOS:**  
+> * **Abertura de Chamado (SD):** Todo cadastro, atualização ou inativação de usuário (condutor ou supervisor) DEVE ser solicitado obrigatoriamente via abertura de chamado **SD**.  
+> * **Exceção por E-mail:** Em casos muito específicos, a solicitação pode ser aceita via e-mail corporativo oficial.  
+> * 🚫 **PROIBIDO VIA SMARTZAP:** Nunca cadastrar, atualizar ou inativar cadastros mediante solicitações feitas via SmartZap. Orientar educadamente o solicitante a abrir um chamado SD.
+
+---
+
+## 📋 2. Pré-requisitos para Cadastro de Condutores
+
+Antes de iniciar o cadastro de um condutor no Vanguarda, certifique-se de que os seguintes itens foram configurados no sistema:
+
+1. 👤 **Cadastro prévio do Supervisor:** O supervisor responsável pela equipe deve estar cadastrado previamente.
+2. 👥 **Criação da Equipe:** Realizada em \`Cadastro > Equipes\` (no Vanguarda), atribuindo o supervisor cadastrado.
+3. 🧮 **Fórmula de Avaliação:** Cadastrada em \`Cadastro > Ranking de Motoristas > Fórmulas de Avaliação\` (Fórmulas para Pesados e Motos).
+4. 💳 **Cartão RFID:** Cadastrado em \`Cadastro > Cartão\` com a unidade, categoria de motorista e numeração decimal (conforme regras do tópico de cartões RFID).
+
+---
+
+## 💻 3. Passo a Passo do Cadastro no Modal Vanguarda
+
+O cadastro é realizado por abas dentro do modal de criação de usuário.
+
+### 3.1. 👤 Aba 1: "Pessoa"
+
+| Campo | Condutor (Motorista) | Supervisor / Outros |
+| :--- | :--- | :--- |
+| **Nome** | Inserir o nome completo em **MAIÚSCULO** | Inserir o nome completo em **MAIÚSCULO** |
+| **Unidade** | Selecionar a unidade em que o colaborador é contratado | Selecionar a unidade em que o colaborador é contratado |
+| **Grupo** | Deixar em **BRANCO** | Marcar o Grupo de Veículos da unidade (permite a visualização dos veículos do grupo no app). |
+| **CPF** | **OBRIGATÓRIO:** Preencher o CPF com os 11 dígitos (incluindo zero inicial, se houver). O CPF será o **login** de acesso. | Preencher o CPF correto do colaborador |
+
+---
+
+### 3.2. 🔑 Aba 2: "Acesso"
+
+| Campo | Condutor (Motorista) | Supervisor / Outros |
+| :--- | :--- | :--- |
+| **Apelido** | Repetir exatamente o mesmo nome cadastrado na aba "Pessoa" | Repetir exatamente o mesmo nome cadastrado na aba "Pessoa" |
+| **E-mail** | Seguir o padrão obrigatório: \`CPF@app.com.br\` (ex: \`01234567890@app.com.br\`) | Informar o e-mail corporativo da SolarBR |
+| **Senha** | O próprio número do CPF (11 dígitos) | Senha padrão: \`solar2026\` |
+| **Perfil** | \`Motoristas Pesados ou Motos SolarBR.\` | \`Supervisão SolarBR\` |
+
+> 💡 **Detalhamento dos Perfis:**  
+> * **\`Motoristas Pesados ou Motos SolarBR.\`:** Concede direito de acesso **exclusivamente ao aplicativo mobile** (o condutor não consegue acessar a interface Web).  
+> * **\`Supervisão SolarBR\`:** Utilizado por supervisores para gestão e acompanhamento no sistema Web e App.  
+> * **\`Monitoramento SolarBR\`:** Perfil mais utilizado por aprendizes, assistentes administrativos, etc.
+
+---
+
+### 3.3. 🪪 Aba 3: "Dados do Colaborador" (Elegibilidade e Ranking)
+
+> ⚡ **PONTO MAIS CRÍTICO DO CADASTRO:**  
+> Esta aba contém os campos vitais que tornam o condutor elegível para pontuar e figurar no **Ranking de Motoristas**.
+
+| Campo | Regras e Orientações de Preenchimento |
+| :--- | :--- |
+| **Cargo** | **OBRIGATÓRIO INICIAR COM "Motorista":**<br>• \`Motorista de entrega\` *(para Pesados)*<br>• \`Motorista vendedor\` *(para Motos)*<br>*(Esse prefixo é o gatilho para o condutor aparecer no ranking e torna os campos adicionais, como CNH, obrigatórios).* |
+| **Matrícula** | Informar a matrícula funcional do colaborador |
+| **Equipe** | Selecionar a equipe do condutor. *(Exige prévio cadastro do Supervisor e da Equipe em \`Cadastro > Equipes\`).* |
+| **Fórmula de Avaliação** | Selecionar a fórmula de pontuação baseada na operação (\`Regra de Pesado\` ou \`Regra de Moto\`). *(Cadastrada previamente em \`Cadastro > Ranking de Motoristas > Fórmulas de Avaliação\`).* |
+| **Cartão** | Selecionar o cartão RFID decimal correspondente. *(Cadastrado em \`Cadastro > Cartão\`).* **Atenção:** Sem o cartão associado corretamente, nada do que o condutor fizer na condução será computado, pois o sistema entende que ele não está em rota. |
+| **Dados de CNH** | Preencher todos os dados da CNH fornecidos (número, categoria, validade). |
+
+---
+
+## 📊 4. Resumo Comparativo: Condutor vs. Supervisor
+
+| Campo / Função | Condutor (Pesado / Moto) | Supervisor |
+| :--- | :---: | :---: |
+| **Canal de Solicitação** | Chamado SD (ou E-mail em casos específicos) | Chamado SD (ou E-mail em casos específicos) |
+| **Formato de E-mail** | \`CPF@app.com.br\` | E-mail corporativo SolarBR |
+| **Senha Padrão** | CPF (11 dígitos) | \`solar2026\` |
+| **Perfil** | \`Motoristas Pesados ou Motos SolarBR\` | \`Supervisão SolarBR\` |
+| **Tipo de Acesso** | Exclusivo Mobile (App) | Web e Mobile |
+| **Preenchimento de Fórmula** | ✅ Obrigatório | ❌ Não necessário |
+| **Preenchimento de Equipe** | ✅ Obrigatório | ❌ Não necessário |
+| **Preenchimento de Cartão RFID** | ✅ Obrigatório | ❌ Não necessário |
+| **Preenchimento de CNH** | ✅ Obrigatório | ❌ Não necessário |
+
+---
+
+## 🔍 5. Diagnóstico e Resolução de Problemas
+
+### 🚨 Sintoma: "O condutor não aparece no Ranking de Motoristas ou o aplicativo não registra pontuação"
+
+Sempre que houver chamados ou reclamações de motoristas sem pontuação no app ou fora do ranking, a causa quase sempre é um **erro ou omissão no cadastro**.
+
+Siga este checklist de auditagem no cadastro do colaborador no Vanguarda:
+
+- [ ] **Prefixagem do Cargo:** Confirmar se o cargo começa estritamente com \`Motorista\` (\`Motorista de entrega\` ou \`Motorista vendedor\`).
+- [ ] **Vínculo de Equipe:** Verificar se a equipe foi selecionada corretamente no cadastro.
+- [ ] **Fórmula de Avaliação:** Garantir que a fórmula de avaliação referente à modalidade (Pesados ou Motos) está atrelada.
+- [ ] **Associação do Cartão RFID:** Validar se a numeração decimal do cartão em \`Cadastro > Cartão\` está associada ao usuário. Se não estiver, o sistema não computará as viagens do condutor.
+- [ ] **Validade e Dados de CNH:** Confirmar se todos os campos da CNH estão devidamente preenchidos.
+- [ ] **CPF e Login:** Verificar se o CPF possui os 11 dígitos corretos e se o perfil concedido é o mobile (\`Motoristas Pesados\` ou \`Motos SolarBR\`).
+`,
+      videoUrl: '',
+      fileDownloadUrl: ''
+    }
+  });
+
+  await prisma.article.create({
+    data: {
       title: 'Instalação do Rastreador Virloc6 Caminhão Solar',
       slug: 'instalacao-rastreador-virloc6-caminhao-solar',
       categoryId: catInstalacao.id,

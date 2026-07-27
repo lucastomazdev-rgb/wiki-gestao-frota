@@ -45,21 +45,21 @@ export default function Sidebar({
   }
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-slate-900/80 backdrop-blur-xl border-r border-white/10 w-64 shrink-0 select-none">
+    <div className="flex flex-col h-full bg-slate-900/90 backdrop-blur-xl border-r border-white/10 w-64 shrink-0 select-none">
       {/* Brand Header */}
       <div className="p-5 border-b border-white/10 flex items-center justify-between">
         <div 
           onClick={() => handleTabClick('home')}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="bg-gradient-to-tr from-red-600 to-red-500 text-white p-2.5 rounded-xl font-black shadow-lg shadow-red-900/30 group-hover:scale-105 transition-all">
-            <BookOpen size={20} strokeWidth={2.5} />
+          <div className="bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 p-2.5 rounded-xl font-bold shadow-md shadow-amber-950/20 group-hover:scale-105 transition-all">
+            <BookOpen size={20} strokeWidth={2.2} />
           </div>
           <div>
-            <span className="font-display font-black text-white tracking-wider text-base block leading-none">
-              SOLAR
+            <span className="font-sans font-bold text-white text-lg block leading-none tracking-tight">
+              Solar
             </span>
-            <span className="text-[10px] text-red-400 font-mono tracking-widest font-bold block mt-1 uppercase">
+            <span className="text-[11px] text-amber-400 font-medium block mt-1">
               Frota Wiki
             </span>
           </div>
@@ -78,7 +78,7 @@ export default function Sidebar({
 
       {/* Main Navigation Items */}
       <div className="p-3 space-y-1.5">
-        <div className="px-3 py-1 text-[10px] font-mono text-slate-400 uppercase tracking-widest font-semibold">
+        <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 tracking-tight">
           Navegação Principal
         </div>
         {navItems.map((item) => {
@@ -89,22 +89,22 @@ export default function Sidebar({
               key={item.key}
               whileTap={{ scale: 0.97 }}
               onClick={() => handleTabClick(item.key)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive 
-                  ? 'bg-gradient-to-r from-red-600 to-red-500 text-white font-bold shadow-md shadow-red-950/40' 
+                  ? 'bg-amber-500/15 text-amber-400 font-semibold border border-amber-500/30 shadow-xs' 
                   : 'text-slate-300 hover:bg-white/5 hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Icon size={17} className={isActive ? 'text-white' : 'text-slate-400'} />
-                <span className="uppercase font-mono tracking-wide">{item.label}</span>
+                <Icon size={18} className={isActive ? 'text-amber-400' : 'text-slate-400'} />
+                <span className="font-sans">{item.label}</span>
               </div>
 
               {item.badge && (
-                <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
                   isActive 
-                    ? 'bg-black/20 text-white border border-white/20' 
-                    : 'bg-white/5 text-red-400 border border-red-500/20'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                    : 'bg-white/5 text-slate-400 border border-white/10'
                 }`}>
                   {item.badge}
                 </span>
@@ -116,9 +116,9 @@ export default function Sidebar({
 
       {/* Categories Tree Navigation */}
       <div className="flex-1 overflow-y-auto p-3 border-t border-white/5 space-y-2">
-        <div className="flex items-center justify-between px-3 text-[10px] font-mono text-slate-400 uppercase tracking-widest font-semibold">
+        <div className="flex items-center justify-between px-3 text-xs font-semibold text-slate-400 tracking-tight">
           <span>Tópicos & Categorias</span>
-          <span className="text-red-400 font-mono bg-red-950/40 border border-red-500/20 px-1.5 py-0.2 rounded-full">{categories.length}</span>
+          <span className="text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.2 rounded-full text-[10px] font-medium">{categories.length}</span>
         </div>
 
         <div className="space-y-1">
@@ -130,15 +130,15 @@ export default function Sidebar({
                 onClick={() => handleCategoryClick(cat.id)}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all group text-left ${
                   isCatSelected
-                    ? 'bg-slate-800/80 text-red-400 font-semibold border-l-2 border-red-500 pl-3 shadow-xs'
+                    ? 'bg-slate-800/90 text-amber-400 font-semibold border-l-2 border-amber-500 pl-3 shadow-xs'
                     : 'text-slate-400 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                  <FolderOpen size={15} className={isCatSelected ? 'text-red-400 shrink-0' : 'text-slate-400 shrink-0 group-hover:text-red-400'} />
+                  <FolderOpen size={15} className={isCatSelected ? 'text-amber-400 shrink-0' : 'text-slate-400 shrink-0 group-hover:text-amber-400'} />
                   <span className="truncate">{cat.name}</span>
                 </div>
-                <ChevronRight size={13} className={`shrink-0 transition-transform ${isCatSelected ? 'text-red-400 translate-x-0.5' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`} />
+                <ChevronRight size={13} className={`shrink-0 transition-transform ${isCatSelected ? 'text-amber-400 translate-x-0.5' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`} />
               </button>
             );
           })}
@@ -148,16 +148,16 @@ export default function Sidebar({
       {/* User Profile Footer Card */}
       {user && (
         <div className="p-3 border-t border-white/10">
-          <div className="flex items-center justify-between gap-3 p-3 bg-slate-800/40 border border-white/10 rounded-2xl backdrop-blur-md">
+          <div className="flex items-center justify-between gap-3 p-3 bg-slate-800/50 border border-white/10 rounded-2xl backdrop-blur-md">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-white truncate">{user.name}</p>
+              <p className="text-xs font-semibold text-white truncate">{user.name}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 {user.role === 'ADMIN' ? (
-                  <span className="text-[9px] bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.2 font-mono uppercase rounded-full font-semibold">
+                  <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.2 rounded-full font-medium">
                     Administrador
                   </span>
                 ) : (
-                  <span className="text-[9px] bg-slate-700/40 text-slate-300 border border-white/10 px-2 py-0.2 font-mono uppercase rounded-full">
+                  <span className="text-[10px] bg-slate-700/50 text-slate-300 border border-white/10 px-2 py-0.2 rounded-full font-medium">
                     Técnico
                   </span>
                 )}
@@ -166,7 +166,7 @@ export default function Sidebar({
 
             <button
               onClick={logout}
-              className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
+              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-xl transition-colors shrink-0"
               title="Sair da Conta"
             >
               <LogOut size={16} />

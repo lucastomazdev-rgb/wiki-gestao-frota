@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { TableSkeleton } from '../components/ui/Skeleton';
+import ConfirmModal from '../components/ui/ConfirmModal';
 import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book, Users, UserPlus, ShieldCheck, UserCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUpdated }) {
+  const toast = useToast();
   const [categories, setCategories] = useState([]);
   const [articles, setArticles] = useState([]);
   const [users, setUsers] = useState([]);
@@ -11,8 +15,19 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
+  // Confirmation Modal State for Irreversible Deletion
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    type: '', // 'article' | 'category' | 'user'
+    id: null,
+    title: '',
+    loading: false,
+  });
+  
   const [activeSubTab, setActiveSubTab] = useState('articles'); // 'articles' | 'categories' | 'users' | 'guide'
   const [showMarkdownGuide, setShowMarkdownGuide] = useState(true);
+
+
 
   // User Management State
   const [showUserForm, setShowUserForm] = useState(false);
@@ -81,10 +96,8 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
     if (!userName || !userEmail || !userPassword) {
-      setError('Preencha nome, e-mail e senha para cadastrar um novo usuário.');
+      toast.error('Preencha nome, e-mail e senha para cadastrar um novo usuário.', 'Formulário Incompleto');
       return;
     }
     setUserSubmitting(true);
@@ -95,7 +108,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
         password: userPassword,
         role: userRole
       });
-      setSuccess(`Usuário ${userName} (${userEmail}) cadastrado com sucesso!`);
+      toast.success(`Usuário ${userName} (${userEmail}) cadastrado com sucesso!`, 'Novo Usuário');
       setUserName('');
       setUserEmail('');
       setUserPassword('');
@@ -103,32 +116,63 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
       setShowUserForm(false);
       fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.message || 'Falha ao cadastrar usuário.');
+      toast.error(err.response?.data?.message || 'Falha ao cadastrar usuário.', 'Erro no Cadastro');
     } finally {
       setUserSubmitting(false);
     }
   };
 
-  const handleDeleteUser = async (id, name) => {
-    if (!window.confirm(`Tem certeza que deseja remover o usuário "${name}"?`)) return;
-    setError('');
-    setSuccess('');
+  const openDeleteModal = (type, id, title) => {
+    setDeleteModal({
+      isOpen: true,
+      type,
+      id,
+      title,
+      loading: false,
+    });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, type: '', id: null, title: '', loading: false });
+  };
+
+  const executeConfirmDelete = async () => {
+    const { type, id, title } = deleteModal;
+    if (!id || !type) return;
+
+    setDeleteModal((prev) => ({ ...prev, loading: true }));
+
     try {
-      await api.delete(`/users/${id}`);
-      setSuccess(`Usuário ${name} removido com sucesso.`);
-      fetchUsers();
+      if (type === 'user') {
+        await api.delete(`/users/${id}`);
+        toast.success(`Usuário "${title}" foi removido com sucesso.`, 'Exclusão Concluída');
+        fetchUsers();
+      } else if (type === 'article') {
+        await api.delete(`/articles/${id}`);
+        toast.success(`Tutorial "${title}" excluído com sucesso.`, 'Exclusão Concluída');
+        fetchData();
+      } else if (type === 'category') {
+        await api.delete(`/categories/${id}`);
+        toast.success(`Categoria "${title}" e seus dados vinculados foram removidos.`, 'Exclusão Concluída');
+        fetchData();
+        if (onCategoriesUpdated) onCategoriesUpdated();
+      }
+      closeDeleteModal();
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao deletar usuário.');
+      toast.error(err.response?.data?.message || 'Falha ao processar exclusão no servidor.', 'Erro na Exclusão');
+      setDeleteModal((prev) => ({ ...prev, loading: false }));
     }
+  };
+
+  const handleDeleteUser = (id, name) => {
+    openDeleteModal('user', id, name);
   };
 
   const handleCreateOrUpdateArticle = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
     
     if (!articleTitle || !articleContent || !articleCategory) {
-      setError('Por favor preencha todos os campos obrigatórios (*).');
+      toast.error('Por favor preencha todos os campos obrigatórios (*).', 'Campos Pendentes');
       return;
     }
 
@@ -143,16 +187,16 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
       if (editingArticleId) {
         await api.put(`/articles/${editingArticleId}`, payload);
-        setSuccess('Artigo atualizado com sucesso!');
+        toast.update('Artigo atualizado com sucesso!', 'Edição Concluída');
       } else {
         await api.post('/articles', payload);
-        setSuccess('Artigo criado com sucesso!');
+        toast.success('Artigo criado com sucesso!', 'Novo Artigo');
       }
 
       resetArticleForm();
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Falha ao salvar o artigo.');
+      toast.error(err.response?.data?.message || 'Falha ao salvar o artigo.', 'Erro de Salvamento');
     }
   };
 
@@ -167,17 +211,8 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
     window.scrollTo(0, 0);
   };
 
-  const handleDeleteArticle = async (id) => {
-    if (!window.confirm('Tem certeza que deseja deletar este artigo?')) return;
-    setError('');
-    setSuccess('');
-    try {
-      await api.delete(`/articles/${id}`);
-      setSuccess('Artigo excluído.');
-      fetchData();
-    } catch (err) {
-      setError('Falha ao excluir o artigo.');
-    }
+  const handleDeleteArticle = (id, title) => {
+    openDeleteModal('article', id, title);
   };
 
   const resetArticleForm = () => {
@@ -192,11 +227,9 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
   const handleCreateOrUpdateCategory = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
 
     if (!categoryName) {
-      setError('Por favor insira o nome da categoria.');
+      toast.error('Por favor insira o nome da categoria.', 'Campo Obrigatório');
       return;
     }
 
@@ -209,17 +242,17 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
       if (editingCategoryId) {
         await api.put(`/categories/${editingCategoryId}`, payload);
-        setSuccess('Categoria atualizada!');
+        toast.update('Categoria atualizada com sucesso!', 'Categoria Editada');
       } else {
         await api.post('/categories', payload);
-        setSuccess('Categoria criada!');
+        toast.success('Categoria criada com sucesso!', 'Nova Categoria');
       }
 
       resetCategoryForm();
       fetchData();
       if (onCategoriesUpdated) onCategoriesUpdated();
     } catch (err) {
-      setError(err.response?.data?.message || 'Falha ao salvar categoria.');
+      toast.error(err.response?.data?.message || 'Falha ao salvar categoria.', 'Erro de Salvamento');
     }
   };
 
@@ -232,19 +265,11 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
     window.scrollTo(0, 0);
   };
 
-  const handleDeleteCategory = async (id) => {
-    if (!window.confirm('Excluir esta categoria deletará todos os seus artigos vinculados. Deseja prosseguir?')) return;
-    setError('');
-    setSuccess('');
-    try {
-      await api.delete(`/categories/${id}`);
-      setSuccess('Categoria e artigos relacionados removidos.');
-      fetchData();
-      if (onCategoriesUpdated) onCategoriesUpdated();
-    } catch (err) {
-      setError('Falha ao deletar categoria.');
-    }
+  const handleDeleteCategory = (id, name) => {
+    openDeleteModal('category', id, name);
   };
+
+
 
   const resetCategoryForm = () => {
     setEditingCategoryId(null);
@@ -259,11 +284,11 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-white/10 pb-4">
         <div>
-          <h1 className="text-2xl text-white font-display font-black tracking-wide uppercase flex items-center gap-2.5">
-            <Shield size={24} className="text-red-400" />
+          <h1 className="text-2xl text-white font-sans font-bold tracking-tight flex items-center gap-2.5">
+            <Shield size={24} className="text-amber-400" />
             Painel de Administração
           </h1>
-          <p className="text-xs text-slate-400 font-mono uppercase tracking-wider mt-1">
+          <p className="text-xs text-slate-400 font-sans mt-1">
             Gestão de tutoriais técnicos e categorias de equipamentos
           </p>
         </div>
@@ -272,42 +297,42 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
           whileHover={{ x: -2 }}
           whileTap={{ scale: 0.95 }}
           onClick={onBack}
-          className="flex items-center gap-1.5 bg-slate-900/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full text-xs font-mono text-slate-300 hover:text-white hover:border-red-500/40 transition-all cursor-pointer shadow-xs"
+          className="flex items-center gap-1.5 bg-slate-900/70 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full text-xs font-sans text-slate-300 hover:text-white hover:border-amber-500/40 transition-all cursor-pointer shadow-xs"
         >
           <ArrowLeft size={14} />
-          <span>VOLTAR PARA WIKI</span>
+          <span className="font-medium">Voltar para Wiki</span>
         </motion.button>
       </div>
 
       {/* Alert Messages */}
       {error && (
-        <div className="p-4 bg-red-950/40 border border-red-500/30 text-red-300 text-xs rounded-2xl flex items-start gap-3 backdrop-blur-md">
-          <AlertCircle size={18} className="shrink-0 mt-0.5" />
+        <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-2xl flex items-start gap-3 backdrop-blur-md">
+          <AlertCircle size={18} className="shrink-0 mt-0.5 text-amber-400" />
           <span>{error}</span>
         </div>
       )}
       {success && (
-        <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs rounded-2xl flex items-start gap-3 backdrop-blur-md">
-          <Check size={18} className="shrink-0 mt-0.5" />
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs rounded-2xl flex items-start gap-3 backdrop-blur-md">
+          <Check size={18} className="shrink-0 mt-0.5 text-emerald-400" />
           <span>{success}</span>
         </div>
       )}
 
       {/* Forms */}
       {showArticleForm && (
-        <div className="p-6 sm:p-8 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl space-y-5 shadow-2xl">
+        <div className="p-6 sm:p-8 bg-slate-900/70 backdrop-blur-xl border border-white/10 rounded-3xl space-y-5 shadow-xl">
           <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <h3 className="text-base font-mono text-red-400 font-bold uppercase">
+            <h3 className="text-base font-sans text-amber-400 font-bold">
               {editingArticleId ? 'Editar Tutorial' : 'Criar Novo Tutorial'}
             </h3>
-            <button onClick={resetArticleForm} className="text-xs text-slate-400 hover:text-white font-mono uppercase bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+            <button onClick={resetArticleForm} className="text-xs text-slate-400 hover:text-white font-sans bg-white/5 border border-white/10 px-3 py-1 rounded-full cursor-pointer transition-colors">
               Cancelar
             </button>
           </div>
           <form onSubmit={handleCreateOrUpdateArticle} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                   Título do Tutorial *
                 </label>
                 <input
@@ -315,19 +340,19 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   value={articleTitle}
                   onChange={(e) => setArticleTitle(e.target.value)}
                   placeholder="Ex: Guia de operação da frota e manutenção"
-                  className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
+                  className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                   required
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                   Categoria Vinculada *
                 </label>
                 <select
                   value={articleCategory}
                   onChange={(e) => setArticleCategory(e.target.value)}
-                  className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
+                  className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                   required
                 >
                   <option value="">Selecione uma categoria...</option>
@@ -340,13 +365,13 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-mono text-slate-400 uppercase">
+                <label className="block text-xs font-sans text-slate-300 font-medium">
                   Conteúdo Markdown *
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowMarkdownGuide(!showMarkdownGuide)}
-                  className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 bg-cyan-950/30 border border-cyan-500/20 px-3 py-1 rounded-full transition-all cursor-pointer"
+                  className="text-xs font-sans text-amber-400 hover:text-amber-300 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full transition-all cursor-pointer font-medium"
                 >
                   <Sparkles size={13} />
                   <span>{showMarkdownGuide ? 'Ocultar Guia de Formatação' : 'Ver Guia de Formatação (Markdown)'}</span>
@@ -355,21 +380,21 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
               </div>
 
               {showMarkdownGuide && (
-                <div className="mb-4 p-4 bg-slate-800/80 border border-cyan-500/30 rounded-2xl space-y-3 shadow-inner">
+                <div className="mb-4 p-4 bg-slate-800/90 border border-amber-500/20 rounded-2xl space-y-3 shadow-inner">
                   <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                    <span className="text-xs font-mono text-cyan-400 font-bold uppercase flex items-center gap-2">
+                    <span className="text-xs font-sans text-amber-400 font-semibold flex items-center gap-2">
                       <HelpCircle size={15} /> Como estruturar uma postagem bonita e profissional:
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">Clique nos exemplos abaixo para inserir no artigo</span>
+                    <span className="text-[11px] font-sans text-slate-400 hidden sm:inline">Clique nos exemplos abaixo para inserir no artigo</span>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
                     {/* Item 1 */}
                     <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
                       <div>
-                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">1. Títulos e Seções</span>
-                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">##</code> para seções e <code className="text-cyan-300">###</code> para sub-tópicos.</p>
-                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                        <span className="font-sans text-amber-400 font-semibold text-xs block">1. Títulos e Seções</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-amber-300">##</code> para seções e <code className="text-amber-300">###</code> para sub-tópicos.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[11px] font-mono text-slate-300 mt-1.5">
                           ## 1. Visão Geral<br />
                           ### 1.1 Requisitos
                         </code>
@@ -377,7 +402,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                       <button
                         type="button"
                         onClick={() => insertMarkdownSnippet('## 1. Visão Geral da Operação\n\nDescreva os detalhes principais aqui...\n\n### 1.1 Ferramentas Necessárias\n- Item 1\n- Item 2')}
-                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                        className="text-[11px] font-sans text-amber-400 hover:underline text-left pt-1 cursor-pointer font-medium"
                       >
                         + Inserir Estrutura de Títulos
                       </button>
@@ -386,16 +411,16 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                     {/* Item 2 */}
                     <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
                       <div>
-                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">2. Negrito & Destaques</span>
-                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">**texto**</code> para destacar palavras-chave essenciais.</p>
-                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                        <span className="font-sans text-amber-400 font-semibold text-xs block">2. Negrito & Destaques</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-amber-300">**texto**</code> para destacar palavras-chave essenciais.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[11px] font-mono text-slate-300 mt-1.5">
                           **Passo Crítico:** Tensão de **12V**.
                         </code>
                       </div>
                       <button
                         type="button"
                         onClick={() => insertMarkdownSnippet('**IMPORTANTE:** Certifique-se de que a **ignição** esteja desligada antes de iniciar.')}
-                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                        className="text-[11px] font-sans text-amber-400 hover:underline text-left pt-1 cursor-pointer font-medium"
                       >
                         + Inserir Exemplo Negrito
                       </button>
@@ -404,9 +429,9 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                     {/* Item 3 */}
                     <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
                       <div>
-                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">3. Listas e Passos</span>
-                        <p className="text-[11px] text-slate-300 mt-1">Use numeração <code className="text-cyan-300">1. 2. 3.</code> para instruções ordenadas.</p>
-                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                        <span className="font-sans text-amber-400 font-semibold text-xs block">3. Listas e Passos</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use numeração <code className="text-amber-300">1. 2. 3.</code> para instruções ordenadas.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[11px] font-mono text-slate-300 mt-1.5">
                           1. Desligar a bateria<br />
                           2. Conectar o rastreador
                         </code>
@@ -414,7 +439,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                       <button
                         type="button"
                         onClick={() => insertMarkdownSnippet('### Passos de Instalação:\n1. Desligar a chave geral do veículo.\n2. Conectar o chicote de alimentação principal.\n3. Realizar o teste de sinal.')}
-                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                        className="text-[11px] font-sans text-amber-400 hover:underline text-left pt-1 cursor-pointer font-medium"
                       >
                         + Inserir Passo a Passo
                       </button>
@@ -423,16 +448,16 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                     {/* Item 4 */}
                     <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
                       <div>
-                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">4. Caixas de Aviso</span>
-                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">&gt;</code> para criar blocos de alerta sobressalentes.</p>
-                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                        <span className="font-sans text-amber-400 font-semibold text-xs block">4. Caixas de Aviso</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-amber-300">&gt;</code> para criar blocos de alerta sobressalentes.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[11px] font-mono text-slate-300 mt-1.5">
                           &gt; ⚠️ **ATENÇÃO:** Perigo de curto!
                         </code>
                       </div>
                       <button
                         type="button"
                         onClick={() => insertMarkdownSnippet('> ⚠️ **AVISO DE SEGURANÇA:**\n> Nunca efetue emendas sem utilizar fita termo retrátil ou isolante de alta fusão.')}
-                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                        className="text-[11px] font-sans text-amber-400 hover:underline text-left pt-1 cursor-pointer font-medium"
                       >
                         + Inserir Caixa de Alerta
                       </button>
@@ -441,9 +466,9 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                     {/* Item 5 */}
                     <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
                       <div>
-                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">5. Comandos & SMS</span>
-                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-cyan-300">```</code> para comandos de configuração técnicos.</p>
-                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                        <span className="font-sans text-amber-400 font-semibold text-xs block">5. Comandos & SMS</span>
+                        <p className="text-[11px] text-slate-300 mt-1">Use <code className="text-amber-300">```</code> para comandos de configuração técnicos.</p>
+                        <code className="block bg-black/50 p-2 rounded text-[11px] font-mono text-slate-300 mt-1.5">
                           ```<br />
                           SETIP 192.168.1.1 5000<br />
                           ```
@@ -452,7 +477,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                       <button
                         type="button"
                         onClick={() => insertMarkdownSnippet('```\nComando SMS: SETIP 10.0.0.1 8080\nResposta Esperada: OK SETIP\n```')}
-                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                        className="text-[11px] font-sans text-amber-400 hover:underline text-left pt-1 cursor-pointer font-medium"
                       >
                         + Inserir Bloco de Código
                       </button>
@@ -461,9 +486,9 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                     {/* Item 6 */}
                     <div className="bg-slate-900/80 p-3 rounded-xl border border-white/5 space-y-1.5 flex flex-col justify-between">
                       <div>
-                        <span className="font-mono text-red-400 font-bold text-[10px] uppercase block">6. Tabelas de Fiação</span>
+                        <span className="font-sans text-amber-400 font-semibold text-xs block">6. Tabelas de Fiação</span>
                         <p className="text-[11px] text-slate-300 mt-1">Organize pinos e cores de fios em tabelas limpas.</p>
-                        <code className="block bg-black/50 p-2 rounded text-[10px] font-mono text-slate-300 mt-1.5">
+                        <code className="block bg-black/50 p-2 rounded text-[11px] font-mono text-slate-300 mt-1.5">
                           | Sinal | Cor | Volts |<br />
                           | --- | --- | --- |<br />
                           | Pós-Chave | Laranja | +12V |
@@ -472,7 +497,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                       <button
                         type="button"
                         onClick={() => insertMarkdownSnippet('| Sinal | Cor do Fio | Tensão | Observação |\n| --- | --- | --- | --- |\n| Positivo (+) | Vermelho | 12V/24V | Direto da Bateria |\n| Pós-Chave (IGN) | Laranja | 12V | Ativo na Chave |\n| Linha Can (H) | Amarelo | 2.5V | Tráfego de Dados |')}
-                        className="text-[10px] font-mono text-cyan-400 hover:underline text-left pt-1 cursor-pointer"
+                        className="text-[11px] font-sans text-amber-400 hover:underline text-left pt-1 cursor-pointer font-medium"
                       >
                         + Inserir Tabela de Fiação
                       </button>
@@ -486,14 +511,14 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                 onChange={(e) => setArticleContent(e.target.value)}
                 placeholder="Insira as instruções em Markdown... Ex: ## 1. Visão Geral da Operação..."
                 rows={12}
-                className="w-full bg-slate-800/60 border border-white/10 text-white text-xs p-4 rounded-xl outline-none focus:border-red-500 font-mono leading-relaxed"
+                className="w-full bg-slate-800/70 border border-white/10 text-white text-xs p-4 rounded-xl outline-none focus:border-amber-500/50 font-mono leading-relaxed"
                 required
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                   URL de Vídeo Demonstrativo (Opcional)
                 </label>
                 <input
@@ -501,12 +526,12 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   value={articleVideo}
                   onChange={(e) => setArticleVideo(e.target.value)}
                   placeholder="Ex: https://youtube.com/watch?v=..."
-                  className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
+                  className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                   URL para Download do Manual PDF (Opcional)
                 </label>
                 <input
@@ -514,14 +539,14 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   value={articleDownload}
                   onChange={(e) => setArticleDownload(e.target.value)}
                   placeholder="Ex: https://site.com/esquema.pdf"
-                  className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
+                  className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-mono text-xs uppercase tracking-wider font-bold px-6 py-3.5 rounded-xl transition-all shadow-lg shadow-red-950/30 cursor-pointer"
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans text-xs font-semibold px-6 py-3.5 rounded-xl transition-all shadow-md shadow-amber-950/20 cursor-pointer"
             >
               {editingArticleId ? 'Salvar Alterações' : 'Publicar Tutorial'}
             </button>
@@ -530,19 +555,19 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
       )}
 
       {showCategoryForm && (
-        <div className="p-6 sm:p-8 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl space-y-5 shadow-2xl">
+        <div className="p-6 sm:p-8 bg-slate-900/70 backdrop-blur-xl border border-white/10 rounded-3xl space-y-5 shadow-xl">
           <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <h3 className="text-base font-mono text-red-400 font-bold uppercase">
+            <h3 className="text-base font-sans text-amber-400 font-bold">
               {editingCategoryId ? 'Editar Categoria' : 'Nova Categoria'}
             </h3>
-            <button onClick={resetCategoryForm} className="text-xs text-slate-400 hover:text-white font-mono uppercase bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+            <button onClick={resetCategoryForm} className="text-xs text-slate-400 hover:text-white font-sans bg-white/5 border border-white/10 px-3 py-1 rounded-full cursor-pointer transition-colors">
               Cancelar
             </button>
           </div>
           <form onSubmit={handleCreateOrUpdateCategory} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                   Nome da Categoria *
                 </label>
                 <input
@@ -550,19 +575,19 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   value={categoryName}
                   onChange={(e) => setCategoryName(e.target.value)}
                   placeholder="Ex: Telemetria Avançada"
-                  className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
+                  className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                   Ícone Representativo
                 </label>
                 <select
                   value={categoryIcon}
                   onChange={(e) => setCategoryIcon(e.target.value)}
-                  className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-mono"
+                  className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                 >
                   {availableIcons.map(icon => (
                     <option key={icon} value={icon}>{icon}</option>
@@ -572,7 +597,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
             </div>
 
             <div>
-              <label className="block text-xs font-mono text-slate-400 uppercase mb-1">
+              <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">
                 Descrição
               </label>
               <input
@@ -580,13 +605,13 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                 value={categoryDesc}
                 onChange={(e) => setCategoryDesc(e.target.value)}
                 placeholder="Ex: Instruções para instalação física..."
-                className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-red-500 font-sans"
+                className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-3 rounded-xl outline-none focus:border-amber-500/50 font-sans"
               />
             </div>
 
             <button
               type="submit"
-              className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-mono text-xs uppercase tracking-wider font-bold px-6 py-3.5 rounded-xl transition-all shadow-lg shadow-red-950/30 cursor-pointer"
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans text-xs font-semibold px-6 py-3.5 rounded-xl transition-all shadow-md shadow-amber-950/20 cursor-pointer"
             >
               {editingCategoryId ? 'Salvar Categoria' : 'Criar Categoria'}
             </button>
@@ -600,32 +625,32 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
           <div className="flex border-b border-white/10 gap-4">
             <button
               onClick={() => setActiveSubTab('articles')}
-              className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all ${
-                activeSubTab === 'articles' ? 'border-red-500 text-red-400' : 'border-transparent text-slate-400 hover:text-white'
+              className={`py-3 font-sans text-xs border-b-2 font-medium transition-all cursor-pointer ${
+                activeSubTab === 'articles' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-slate-400 hover:text-white'
               }`}
             >
               Gerenciar Tutoriais ({articles.length})
             </button>
             <button
               onClick={() => setActiveSubTab('categories')}
-              className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all ${
-                activeSubTab === 'categories' ? 'border-red-500 text-red-400' : 'border-transparent text-slate-400 hover:text-white'
+              className={`py-3 font-sans text-xs border-b-2 font-medium transition-all cursor-pointer ${
+                activeSubTab === 'categories' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-slate-400 hover:text-white'
               }`}
             >
               Gerenciar Categorias ({categories.length})
             </button>
             <button
               onClick={() => setActiveSubTab('users')}
-              className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all flex items-center gap-1.5 ${
-                activeSubTab === 'users' ? 'border-red-500 text-red-400' : 'border-transparent text-slate-400 hover:text-white'
+              className={`py-3 font-sans text-xs border-b-2 font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'users' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-slate-400 hover:text-white'
               }`}
             >
               <Users size={14} /> Gerenciar Usuários ({users.length})
             </button>
             <button
               onClick={() => setActiveSubTab('guide')}
-              className={`py-3 font-mono text-xs uppercase tracking-wider border-b-2 font-bold transition-all flex items-center gap-1.5 ${
-                activeSubTab === 'guide' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-white'
+              className={`py-3 font-sans text-xs border-b-2 font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeSubTab === 'guide' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-slate-400 hover:text-white'
               }`}
             >
               <Sparkles size={14} /> Guia de Formatação (Markdown)
@@ -635,40 +660,40 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
           {activeSubTab === 'articles' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-mono text-slate-400">LISTAGEM DE TUTORIAIS CADASTRADOS</span>
+                <span className="text-xs font-sans text-slate-400 font-medium">Listagem de tutoriais cadastrados</span>
                 <button
                   onClick={() => setShowArticleForm(true)}
-                  className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-4 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 shadow-md shadow-red-950/30 transition-all cursor-pointer"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-sans font-semibold flex items-center gap-2 shadow-md shadow-amber-950/20 transition-all cursor-pointer"
                 >
                   <Plus size={16} /> Novo Tutorial
                 </button>
               </div>
 
               {loading ? (
-                <div className="py-16 flex justify-center"><div className="h-6 w-6 border-2 border-white/10 border-t-red-500 rounded-full animate-spin" /></div>
+                <TableSkeleton rows={4} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {articles.map(art => (
-                    <div key={art.id} className="p-5 bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-between group hover:border-white/20 transition-all">
+                    <div key={art.id} className="p-5 bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-between group hover:border-amber-500/40 transition-all">
                       <div className="min-w-0 flex-1 pr-4">
-                        <span className="text-[9px] font-mono text-red-400 bg-red-950/30 border border-red-500/20 px-2.5 py-0.5 rounded-full uppercase">
+                        <span className="text-[11px] font-sans text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium">
                           {art.category?.name}
                         </span>
-                        <h4 className="text-sm font-bold text-white mt-2 truncate group-hover:text-red-400 transition-colors">
+                        <h4 className="text-sm font-semibold text-white mt-2 truncate group-hover:text-amber-400 transition-colors">
                           {art.title}
                         </h4>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleEditArticle(art)}
-                          className="p-2 border border-white/10 hover:border-red-500/40 text-slate-400 hover:text-white rounded-xl bg-white/5 transition-colors"
+                          className="p-2 border border-white/10 hover:border-amber-500/40 text-slate-400 hover:text-white rounded-xl bg-white/5 transition-colors cursor-pointer"
                           title="Editar Artigo"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
-                          onClick={() => handleDeleteArticle(art.id)}
-                          className="p-2 border border-white/10 hover:border-red-500/40 text-slate-400 hover:text-red-400 rounded-xl bg-white/5 transition-colors"
+                          onClick={() => handleDeleteArticle(art.id, art.title)}
+                          className="p-2 border border-white/10 hover:border-amber-500/40 text-slate-400 hover:text-amber-400 rounded-xl bg-white/5 transition-colors cursor-pointer"
                           title="Excluir Artigo"
                         >
                           <Trash2 size={14} />
@@ -684,36 +709,36 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
           {activeSubTab === 'categories' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-mono text-slate-400">LISTAGEM DE CATEGORIAS</span>
+                <span className="text-xs font-sans text-slate-400 font-medium">Listagem de categorias</span>
                 <button
                   onClick={() => setShowCategoryForm(true)}
-                  className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-4 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 shadow-md shadow-red-950/30 transition-all cursor-pointer"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-sans font-semibold flex items-center gap-2 shadow-md shadow-amber-950/20 transition-all cursor-pointer"
                 >
                   <Plus size={16} /> Nova Categoria
                 </button>
               </div>
 
               {loading ? (
-                <div className="py-16 flex justify-center"><div className="h-6 w-6 border-2 border-white/10 border-t-red-500 rounded-full animate-spin" /></div>
+                <TableSkeleton rows={4} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {categories.map(cat => (
-                    <div key={cat.id} className="p-5 bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-between">
+                    <div key={cat.id} className="p-5 bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-between hover:border-amber-500/40 transition-all">
                       <div className="flex-1 truncate pr-4">
-                        <h4 className="text-sm font-bold text-white">{cat.name}</h4>
-                        <span className="text-[10px] font-mono text-slate-400 uppercase">Ícone: {cat.iconName}</span>
+                        <h4 className="text-sm font-semibold text-white">{cat.name}</h4>
+                        <span className="text-[11px] font-sans text-slate-400">Ícone: {cat.iconName}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleEditCategory(cat)}
-                          className="p-2 border border-white/10 hover:border-red-500/40 text-slate-400 hover:text-white rounded-xl bg-white/5 transition-colors"
+                          className="p-2 border border-white/10 hover:border-amber-500/40 text-slate-400 hover:text-white rounded-xl bg-white/5 transition-colors cursor-pointer"
                           title="Editar Categoria"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
-                          onClick={() => handleDeleteCategory(cat.id)}
-                          className="p-2 border border-white/10 hover:border-red-500/40 text-slate-400 hover:text-red-400 rounded-xl bg-white/5 transition-colors"
+                          onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                          className="p-2 border border-white/10 hover:border-amber-500/40 text-slate-400 hover:text-amber-400 rounded-xl bg-white/5 transition-colors cursor-pointer"
                           title="Excluir Categoria"
                         >
                           <Trash2 size={14} />
@@ -723,16 +748,17 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   ))}
                 </div>
               )}
+
             </div>
           )}
 
           {activeSubTab === 'users' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">GESTÃO DE USUÁRIOS E TÉCNICOS CADASTRADOS</span>
+                <span className="text-xs font-sans text-slate-400 font-medium">Gestão de usuários e técnicos cadastrados</span>
                 <button
                   onClick={() => setShowUserForm(!showUserForm)}
-                  className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-4 py-2.5 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-2 shadow-md shadow-red-950/30 transition-all cursor-pointer"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-sans font-semibold flex items-center gap-2 shadow-md shadow-amber-950/20 transition-all cursor-pointer"
                 >
                   <UserPlus size={16} /> {showUserForm ? 'Cancelar' : 'Novo Usuário'}
                 </button>
@@ -742,52 +768,52 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="p-6 bg-slate-900/80 border border-white/10 rounded-3xl space-y-4 shadow-xl"
+                  className="p-6 bg-slate-900/70 border border-white/10 rounded-3xl space-y-4 shadow-xl"
                 >
-                  <h3 className="text-sm font-mono text-red-400 font-bold uppercase flex items-center gap-2">
+                  <h3 className="text-sm font-sans text-amber-400 font-bold flex items-center gap-2">
                     <UserPlus size={18} /> Cadastrar Novo Usuário / Técnico
                   </h3>
                   <form onSubmit={handleCreateUser} className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
-                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">Nome Completo *</label>
+                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">Nome Completo *</label>
                         <input
                           type="text"
                           value={userName}
                           onChange={(e) => setUserName(e.target.value)}
                           placeholder="Ex: Carlos Andrade"
-                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-sans"
+                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                           required
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">E-mail *</label>
+                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">E-mail *</label>
                         <input
                           type="email"
                           value={userEmail}
                           onChange={(e) => setUserEmail(e.target.value)}
                           placeholder="carlos@solar.com"
-                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-sans"
+                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                           required
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">Senha Inicial *</label>
+                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">Senha Inicial *</label>
                         <input
                           type="password"
                           value={userPassword}
                           onChange={(e) => setUserPassword(e.target.value)}
                           placeholder="••••••••"
-                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-sans"
+                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                           required
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-mono text-slate-400 uppercase mb-1">Nível de Acesso</label>
+                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">Nível de Acesso</label>
                         <select
                           value={userRole}
                           onChange={(e) => setUserRole(e.target.value)}
-                          className="w-full bg-slate-800/60 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-red-500 font-mono"
+                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                         >
                           <option value="USER">USER (Técnico / Consulta)</option>
                           <option value="ADMIN">ADMIN (Supervisor / Administrador)</option>
@@ -798,14 +824,14 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                       <button
                         type="button"
                         onClick={() => setShowUserForm(false)}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-mono uppercase cursor-pointer"
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-sans cursor-pointer transition-colors font-medium"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
                         disabled={userSubmitting}
-                        className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-xl text-xs font-mono font-bold uppercase shadow-md shadow-red-950/30 cursor-pointer disabled:opacity-50"
+                        className="px-6 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-sans font-semibold shadow-md shadow-amber-950/20 cursor-pointer disabled:opacity-50 transition-all"
                       >
                         {userSubmitting ? 'Cadastrando...' : 'Cadastrar Usuário'}
                       </button>
@@ -815,10 +841,10 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
               )}
 
               {/* Users List Table */}
-              <div className="bg-slate-900/60 border border-white/10 rounded-3xl overflow-hidden shadow-xl">
+              <div className="bg-slate-900/70 border border-white/10 rounded-3xl overflow-hidden shadow-xl">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-white/10 bg-slate-800/40 text-[11px] font-mono uppercase text-slate-400">
+                    <tr className="border-b border-white/10 bg-slate-800/50 text-xs font-sans font-semibold text-slate-300">
                       <th className="py-3.5 px-6">Nome</th>
                       <th className="py-3.5 px-6">E-mail</th>
                       <th className="py-3.5 px-6">Nível de Acesso</th>
@@ -829,19 +855,19 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                     {users.map((u) => (
                       <tr key={u.id} className="hover:bg-white/5 transition-colors">
                         <td className="py-3.5 px-6 font-medium text-white flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-mono font-bold text-red-400">
+                          <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xs font-sans font-bold text-amber-400">
                             {u.name ? u.name[0].toUpperCase() : 'U'}
                           </div>
                           <span>{u.name}</span>
                         </td>
-                        <td className="py-3.5 px-6 font-mono text-xs text-slate-300">{u.email}</td>
-                        <td className="py-3.5 px-6 font-mono text-xs">
+                        <td className="py-3.5 px-6 text-xs text-slate-300">{u.email}</td>
+                        <td className="py-3.5 px-6 text-xs">
                           {u.role === 'ADMIN' ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-950/80 border border-red-500/30 text-red-400 font-bold text-[10px]">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-semibold text-[11px]">
                               <ShieldCheck size={12} /> ADMIN
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-950/80 border border-sky-500/30 text-sky-400 font-bold text-[10px]">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 border border-white/10 text-slate-300 font-semibold text-[11px]">
                               <UserCheck size={12} /> TÉCNICO
                             </span>
                           )}
@@ -849,7 +875,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                         <td className="py-3.5 px-6 text-right">
                           <button
                             onClick={() => handleDeleteUser(u.id, u.name)}
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
                             title="Excluir Usuário"
                           >
                             <Trash2 size={16} />
@@ -864,10 +890,10 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
           )}
 
           {activeSubTab === 'guide' && (
-            <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl space-y-6 shadow-2xl">
+            <div className="p-6 bg-slate-900/70 backdrop-blur-xl border border-white/10 rounded-3xl space-y-6 shadow-xl">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div>
-                  <h3 className="text-base font-mono text-cyan-400 font-bold uppercase flex items-center gap-2">
+                  <h3 className="text-base font-sans text-amber-400 font-bold flex items-center gap-2">
                     <Sparkles size={18} /> Manual de Formatação de Postagens (Markdown)
                   </h3>
                   <p className="text-xs text-slate-400 mt-1 font-sans">
@@ -878,16 +904,16 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   onClick={() => {
                     setShowArticleForm(true);
                   }}
-                  className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 text-white px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-950/20"
                 >
                   <Plus size={15} /> Criar Postagem
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300">
-                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
-                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">1. Títulos e Subtítulos</h4>
-                  <p>Inicie a linha com <code className="text-cyan-300">##</code> para criar seções numeradas ou temáticas.</p>
+                <div className="p-4 bg-slate-800/60 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-sans text-amber-400 font-bold">1. Títulos e Subtítulos</h4>
+                  <p>Inicie a linha com <code className="text-amber-300">##</code> para criar seções numeradas ou temáticas.</p>
                   <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
 {`## 1. Introdução ao Procedimento
 ### 1.1 Ferramentas Necessárias`}
@@ -895,30 +921,30 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   <button
                     type="button"
                     onClick={() => insertMarkdownSnippet('## 1. Visão Geral da Operação\n\nDescreva os detalhes principais aqui...')}
-                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                    className="text-xs font-sans text-amber-400 hover:underline cursor-pointer font-medium"
                   >
                     + Usar este modelo no novo tutorial
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
-                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">2. Destaques em Negrito</h4>
-                  <p>Envolva os termos essenciais entre <code className="text-cyan-300">**duplos asteriscos**</code> para facilitar a leitura dinâmica.</p>
+                <div className="p-4 bg-slate-800/60 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-sans text-amber-400 font-bold">2. Destaques em Negrito</h4>
+                  <p>Envolva os termos essenciais entre <code className="text-amber-300">**duplos asteriscos**</code> para facilitar a leitura dinâmica.</p>
                   <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
 {`**AVISO:** Verificar se o **chicote principal** está desenergizado.`}
                   </pre>
                   <button
                     type="button"
                     onClick={() => insertMarkdownSnippet('**IMPORTANTE:** Certifique-se de que a **ignição** esteja desligada antes de iniciar.')}
-                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                    className="text-xs font-sans text-amber-400 hover:underline cursor-pointer font-medium"
                   >
                     + Usar este modelo no novo tutorial
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
-                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">3. Listas Numéricas (Passos)</h4>
-                  <p>Para instruções sequenciais de montagem ou teste, utilize números seguidos de ponto <code className="text-cyan-300">1. 2. 3.</code>.</p>
+                <div className="p-4 bg-slate-800/60 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-sans text-amber-400 font-bold">3. Listas Numéricas (Passos)</h4>
+                  <p>Para instruções sequenciais de montagem ou teste, utilize números seguidos de ponto <code className="text-amber-300">1. 2. 3.</code>.</p>
                   <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
 {`1. Retirar o painel frontal
 2. Identificar os fios pós-chave (12V)
@@ -927,15 +953,15 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   <button
                     type="button"
                     onClick={() => insertMarkdownSnippet('### Passos de Instalação:\n1. Desligar a chave geral do veículo.\n2. Conectar o chicote de alimentação principal.\n3. Realizar o teste de sinal.')}
-                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                    className="text-xs font-sans text-amber-400 hover:underline cursor-pointer font-medium"
                   >
                     + Usar este modelo no novo tutorial
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
-                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">4. Blocos de Aviso / Alerta</h4>
-                  <p>Coloque o símbolo <code className="text-cyan-300">&gt;</code> no início da linha para destacar regras de segurança da frota.</p>
+                <div className="p-4 bg-slate-800/60 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-sans text-amber-400 font-bold">4. Blocos de Aviso / Alerta</h4>
+                  <p>Coloque o símbolo <code className="text-amber-300">&gt;</code> no início da linha para destacar regras de segurança da frota.</p>
                   <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
 {`> ⚠️ **PROCEDIMENTO CRÍTICO:**
 > Não cortar a fiação original do veículo em hipótese alguma.`}
@@ -943,15 +969,15 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                   <button
                     type="button"
                     onClick={() => insertMarkdownSnippet('> ⚠️ **AVISO DE SEGURANÇA:**\n> Nunca efetue emendas sem utilizar fita termo retrátil ou isolante de alta fusão.')}
-                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                    className="text-xs font-sans text-amber-400 hover:underline cursor-pointer font-medium"
                   >
                     + Usar este modelo no novo tutorial
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
-                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">5. Comandos Técnicos e Parâmetros</h4>
-                  <p>Envolva trechos de comandos SMS ou parâmetros de rastreadores entre crases triplas <code className="text-cyan-300">```</code>.</p>
+                <div className="p-4 bg-slate-800/60 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-sans text-amber-400 font-bold">5. Comandos Técnicos e Parâmetros</h4>
+                  <p>Envolva trechos de comandos SMS ou parâmetros de rastreadores entre crases triplas <code className="text-amber-300">```</code>.</p>
                   <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
 {`\`\`\`
 SMS: SETIP 192.168.1.1 5000
@@ -961,14 +987,14 @@ RESPOSTA: SETIP OK
                   <button
                     type="button"
                     onClick={() => insertMarkdownSnippet('```\nComando SMS: SETIP 10.0.0.1 8080\nResposta Esperada: OK SETIP\n```')}
-                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                    className="text-xs font-sans text-amber-400 hover:underline cursor-pointer font-medium"
                   >
                     + Usar este modelo no novo tutorial
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-800/50 border border-white/5 rounded-2xl space-y-3">
-                  <h4 className="text-sm font-mono text-red-400 font-bold uppercase">6. Tabela de Fiação e Sinais</h4>
+                <div className="p-4 bg-slate-800/60 border border-white/5 rounded-2xl space-y-3">
+                  <h4 className="text-sm font-sans text-amber-400 font-bold">6. Tabela de Fiação e Sinais</h4>
                   <p>Organize cores de fios e tensões utilizando a sintaxe de tabelas Markdown.</p>
                   <pre className="bg-black/50 p-3 rounded-xl font-mono text-[11px] text-slate-200 overflow-x-auto">
 {`| Sinal | Cor do Fio | Tensão |
@@ -979,7 +1005,7 @@ RESPOSTA: SETIP OK
                   <button
                     type="button"
                     onClick={() => insertMarkdownSnippet('| Sinal | Cor do Fio | Tensão | Observação |\n| --- | --- | --- | --- |\n| Positivo (+) | Vermelho | 12V/24V | Direto da Bateria |\n| Pós-Chave (IGN) | Laranja | 12V | Ativo na Chave |\n| Linha Can (H) | Amarelo | 2.5V | Tráfego de Dados |')}
-                    className="text-xs font-mono text-cyan-400 hover:underline cursor-pointer"
+                    className="text-xs font-sans text-amber-400 hover:underline cursor-pointer font-medium"
                   >
                     + Usar este modelo no novo tutorial
                   </button>
@@ -989,6 +1015,17 @@ RESPOSTA: SETIP OK
           )}
         </div>
       )}
+
+      {/* Confirmation Modal for Irreversible Actions */}
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        itemTitle={deleteModal.title}
+        message="Deseja mesmo excluir? Essa ação é irreversível."
+        loading={deleteModal.loading}
+        onConfirm={executeConfirmDelete}
+        onCancel={closeDeleteModal}
+      />
     </div>
   );
 }
+

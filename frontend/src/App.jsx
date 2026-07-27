@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth, api } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import ToastContainer from './components/ui/ToastContainer';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Footer from './components/Footer';
@@ -40,9 +42,9 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center gap-3">
-        <div className="h-8 w-8 border-3 border-brand-border border-t-brand-lime rounded-full animate-spin" />
-        <span className="text-xs font-mono text-brand-muted uppercase tracking-widest">Iniciando Sistema Solar...</span>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 border-2 border-white/10 border-t-amber-500 rounded-full animate-spin" />
+        <span className="text-xs font-sans text-slate-400">Iniciando Sistema Solar...</span>
       </div>
     );
   }
@@ -81,7 +83,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg text-brand-text flex flex-row relative overflow-x-hidden">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-row relative overflow-x-hidden">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -94,7 +96,7 @@ function AppContent() {
       />
 
       {/* Main Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-brand-bg">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-slate-900">
         <TopBar
           onToggleMobileSidebar={() => setMobileSidebarOpen(true)}
           currentTab={currentTab}
@@ -131,12 +133,12 @@ function AppContent() {
 
           {currentTab === 'admin' && user.role !== 'ADMIN' && (
             <div className="py-16 px-4 text-center max-w-md mx-auto">
-              <ShieldAlert size={56} className="mx-auto text-red-500 mb-4" />
-              <h3 className="text-xl font-bold text-white uppercase font-display">Acesso Restrito</h3>
-              <p className="text-sm text-brand-muted mt-2">Área restrita a administradores do sistema.</p>
+              <ShieldAlert size={56} className="mx-auto text-amber-500 mb-4" />
+              <h3 className="text-xl font-bold text-white font-sans">Acesso Restrito</h3>
+              <p className="text-sm text-slate-400 mt-2">Área restrita a administradores do sistema.</p>
               <button
                 onClick={() => handleTabChange('home')}
-                className="mt-6 bg-brand-surface border border-brand-border px-5 py-2.5 text-xs font-mono text-brand-lime hover:border-brand-lime rounded-xs transition-colors"
+                className="mt-6 bg-slate-800 border border-white/10 px-5 py-2.5 text-xs font-sans text-amber-400 hover:border-amber-500/40 rounded-full transition-colors cursor-pointer"
               >
                 Voltar para a Wiki
               </button>
@@ -145,11 +147,11 @@ function AppContent() {
 
           {currentTab === 'downloads' && (
             <div className="max-w-4xl mx-auto space-y-6">
-              <div className="border-b border-brand-border pb-4">
-                <h1 className="text-white font-display text-2xl font-black tracking-wide uppercase">
+              <div className="border-b border-white/10 pb-4">
+                <h1 className="text-white font-sans text-2xl font-bold tracking-tight">
                   Repositório de Arquivos Técnicos
                 </h1>
-                <p className="text-xs text-brand-muted font-mono uppercase tracking-wider mt-1">
+                <p className="text-xs text-slate-400 font-sans mt-1">
                   Esquemas elétricos, diagramas de fiação e manuais em PDF para download
                 </p>
               </div>
@@ -159,22 +161,22 @@ function AppContent() {
                   {technicalFiles.map((file, idx) => (
                     <motion.a
                       key={idx}
-                      whileHover={{ scale: 1.01, borderColor: 'var(--color-brand-lime)' }}
+                      whileHover={{ scale: 1.01 }}
                       href={file.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-4 bg-brand-surface border border-brand-border rounded-xs flex flex-col justify-between group transition-all h-full"
+                      className="p-4 bg-slate-900/60 border border-white/10 rounded-2xl flex flex-col justify-between group transition-all h-full hover:border-amber-500/40"
                     >
                       <div>
-                        <span className="text-[9px] font-mono bg-brand-surface-light border border-brand-border text-brand-lime px-2 py-0.5 rounded-xs uppercase tracking-wider font-semibold">
+                        <span className="text-[11px] font-sans bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2.5 py-0.5 rounded-full font-medium">
                           {file.type}
                         </span>
-                        <h3 className="text-sm font-semibold text-white mt-3 group-hover:text-brand-lime transition-colors leading-snug">
+                        <h3 className="text-sm font-semibold text-white mt-3 group-hover:text-amber-400 transition-colors leading-snug">
                           {file.title}
                         </h3>
                       </div>
                       
-                      <div className="mt-4 pt-3 border-t border-brand-border/40 flex items-center justify-between text-xs font-mono text-brand-muted group-hover:text-brand-lime">
+                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs font-sans text-slate-400 group-hover:text-amber-400">
                         <span>Download PDF</span>
                         <Download size={16} className="shrink-0 transition-transform group-hover:translate-y-0.5" />
                       </div>
@@ -182,10 +184,10 @@ function AppContent() {
                   ))}
                 </div>
               ) : (
-                <div className="py-16 px-4 text-center border border-dashed border-brand-border rounded-xs bg-brand-surface/40 my-8">
-                  <FolderOpen size={48} className="mx-auto text-brand-muted mb-3 opacity-60" />
-                  <h3 className="text-base font-semibold text-white font-display">Ainda não temos dados por aqui...</h3>
-                  <p className="text-xs text-brand-muted mt-1 font-mono">
+                <div className="py-16 px-4 text-center border border-dashed border-white/10 rounded-3xl bg-slate-900/40 my-8">
+                  <FolderOpen size={48} className="mx-auto text-slate-500 mb-3 opacity-60" />
+                  <h3 className="text-base font-semibold text-white font-sans">Ainda não temos dados por aqui...</h3>
+                  <p className="text-xs text-slate-400 mt-1 font-sans">
                     Nenhum arquivo ou documento técnico foi disponibilizado no momento.
                   </p>
                 </div>
@@ -197,6 +199,9 @@ function AppContent() {
 
       {/* Mobile Bottom Navigation (only on small mobile screens) */}
       <Footer currentTab={currentTab === 'article-detail' ? 'home' : currentTab} setCurrentTab={handleTabChange} />
+
+      {/* Global Toast Container */}
+      <ToastContainer />
     </div>
   );
 }
@@ -204,7 +209,10 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }
+

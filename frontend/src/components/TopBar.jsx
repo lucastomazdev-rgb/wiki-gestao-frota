@@ -27,30 +27,30 @@ export default function TopBar({
   };
 
   return (
-    <header className="sticky top-0 z-20 bg-slate-900/60 backdrop-blur-md border-b border-white/10 px-6 py-3.5 flex items-center justify-between">
+    <header className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur-md border-b border-white/10 px-6 py-3.5 flex items-center justify-between">
       <div className="flex items-center gap-3 min-w-0">
         {/* Mobile menu trigger */}
         <button
           onClick={onToggleMobileSidebar}
-          className="md:hidden p-2 text-slate-300 hover:text-red-400 bg-white/5 border border-white/10 rounded-xl transition-colors"
+          className="md:hidden p-2 text-slate-300 hover:text-amber-400 bg-white/5 border border-white/10 rounded-xl transition-colors"
           title="Abrir Menu"
         >
           <Menu size={18} />
         </button>
 
         {/* Breadcrumb Navigation */}
-        <nav className="flex items-center gap-2 text-xs font-mono truncate">
-          <span className="text-red-400 font-bold hidden sm:inline uppercase tracking-wider bg-red-950/30 border border-red-500/20 px-2 py-0.5 rounded-md">
-            SOLAR WIKI
+        <nav className="flex items-center gap-2 text-xs font-sans truncate">
+          <span className="text-amber-400 font-semibold hidden sm:inline bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
+            Solar Wiki
           </span>
           <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-500" />
-          <span className="uppercase tracking-wider font-semibold text-white">
+          <span className="font-semibold text-white">
             {getTabLabel()}
           </span>
           {breadcrumbTitle && (
             <>
               <ChevronRight size={14} className="shrink-0 text-slate-500" />
-              <span className="text-cyan-400 truncate font-medium max-w-[200px] sm:max-w-[350px]">
+              <span className="text-amber-300/90 truncate font-medium max-w-[200px] sm:max-w-[350px]">
                 {breadcrumbTitle}
               </span>
             </>
@@ -61,9 +61,9 @@ export default function TopBar({
       {/* Action shortcuts */}
       <div className="flex items-center gap-3 shrink-0">
         {/* System indicator */}
-        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-950/30 border border-emerald-500/20 rounded-full text-[10px] font-mono text-emerald-400 font-semibold shadow-xs">
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-sans text-emerald-400 font-medium shadow-xs">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>FROTA ONLINE</span>
+          <span>Frota Online</span>
         </div>
       </div>
     </header>

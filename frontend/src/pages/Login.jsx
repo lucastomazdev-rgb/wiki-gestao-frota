@@ -61,25 +61,25 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-slate-950 relative overflow-hidden">
       {/* Soft ambient glowing background orbs */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-red-600/10 rounded-full filter blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-amber-500/10 rounded-full filter blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 left-10 w-[350px] h-[350px] bg-sky-500/10 rounded-full filter blur-[100px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="w-full max-w-md bg-slate-900/60 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl relative shadow-2xl"
+        className="w-full max-w-md bg-slate-900/70 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl relative shadow-xl"
       >
         {/* Branding Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex p-3 bg-gradient-to-tr from-red-600 to-red-500 text-white rounded-2xl mb-3 shadow-lg shadow-red-950/40">
-            <BookOpen size={28} strokeWidth={2.5} />
+          <div className="inline-flex p-3.5 bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 rounded-2xl mb-3 shadow-md shadow-amber-950/20">
+            <BookOpen size={28} strokeWidth={2.2} />
           </div>
-          <h1 className="font-display font-black text-2xl text-white tracking-widest leading-none uppercase">
-            SOLAR
+          <h1 className="font-sans font-bold text-2xl text-white tracking-tight leading-none">
+            Solar Frota Wiki
           </h1>
-          <p className="text-xs font-mono tracking-widest text-red-400 uppercase font-bold mt-1.5">
-            CONTROLE DE ACESSO • FROTA WIKI
+          <p className="text-xs font-sans text-amber-400 font-medium mt-1.5">
+            Controle de Acesso Operacional
           </p>
         </div>
 
@@ -87,9 +87,9 @@ export default function Login() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="mb-5 p-3.5 bg-red-950/40 border border-red-500/30 text-red-300 text-xs rounded-xl flex items-start gap-2.5 backdrop-blur-md"
+            className="mb-5 p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs rounded-xl flex items-start gap-2.5 backdrop-blur-md"
           >
-            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <AlertCircle size={16} className="shrink-0 mt-0.5 text-amber-400" />
             <span>{apiError}</span>
           </motion.div>
         )}
@@ -97,7 +97,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {isRegister && (
             <div>
-              <label className="block text-xs font-mono text-slate-400 uppercase mb-1.5 font-medium">
+              <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
                 Nome Completo
               </label>
               <div className="relative">
@@ -109,19 +109,19 @@ export default function Login() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: João Silva"
-                  className={`w-full bg-slate-800/60 border ${
-                    validationErrors.name ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-red-500'
+                  className={`w-full bg-slate-800/70 border ${
+                    validationErrors.name ? 'border-amber-500/50 focus:border-amber-500' : 'border-white/10 focus:border-amber-500/50'
                   } text-white pl-10 pr-4 py-3 text-sm rounded-xl outline-none transition-all font-sans`}
                 />
               </div>
               {validationErrors.name && (
-                <span className="text-[10px] text-red-400 mt-1 block font-mono">{validationErrors.name}</span>
+                <span className="text-[11px] text-amber-400 mt-1 block font-sans">{validationErrors.name}</span>
               )}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-mono text-slate-400 uppercase mb-1.5 font-medium">
+            <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
               E-mail Operacional
             </label>
             <div className="relative">
@@ -133,18 +133,18 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nome.sobrenome@solar.com"
-                className={`w-full bg-slate-800/60 border ${
-                  validationErrors.email ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-red-500'
+                className={`w-full bg-slate-800/70 border ${
+                  validationErrors.email ? 'border-amber-500/50 focus:border-amber-500' : 'border-white/10 focus:border-amber-500/50'
                 } text-white pl-10 pr-4 py-3 text-sm rounded-xl outline-none transition-all font-sans`}
               />
             </div>
             {validationErrors.email && (
-              <span className="text-[10px] text-red-400 mt-1 block font-mono">{validationErrors.email}</span>
+              <span className="text-[11px] text-amber-400 mt-1 block font-sans">{validationErrors.email}</span>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-slate-400 uppercase mb-1.5 font-medium">
+            <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
               Senha de Acesso
             </label>
             <div className="relative">
@@ -156,13 +156,13 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="******"
-                className={`w-full bg-slate-800/60 border ${
-                  validationErrors.password ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-red-500'
+                className={`w-full bg-slate-800/70 border ${
+                  validationErrors.password ? 'border-amber-500/50 focus:border-amber-500' : 'border-white/10 focus:border-amber-500/50'
                 } text-white pl-10 pr-4 py-3 text-sm rounded-xl outline-none transition-all font-sans`}
               />
             </div>
             {validationErrors.password && (
-              <span className="text-[10px] text-red-400 mt-1 block font-mono">{validationErrors.password}</span>
+              <span className="text-[11px] text-amber-400 mt-1 block font-sans">{validationErrors.password}</span>
             )}
           </div>
 
@@ -171,7 +171,7 @@ export default function Login() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-mono text-xs uppercase tracking-wider font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-red-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans text-sm font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-amber-950/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
             {isSubmitting ? (
               <Loader size={16} className="animate-spin" />
@@ -190,7 +190,7 @@ export default function Login() {
               setValidationErrors({});
               setApiError('');
             }}
-            className="text-xs text-slate-400 hover:text-red-400 transition-colors font-mono uppercase tracking-wider"
+            className="text-xs text-slate-400 hover:text-amber-400 transition-colors font-sans font-medium"
           >
             {isRegister ? 'Já tenho login operacional' : 'Criar novo acesso técnico'}
           </button>
