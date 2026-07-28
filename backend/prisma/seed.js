@@ -15,18 +15,14 @@ const prisma = new PrismaClient({
 async function main() {
   console.log('Iniciando semeação do banco de dados (Seeding)...');
 
-  // 1. Limpar dados existentes (opcional, útil para resetar)
-  await prisma.article.deleteMany({});
-  await prisma.category.deleteMany({});
-  await prisma.user.deleteMany({});
-
-  // 2. Criar Senhas Criptografadas
+  // 1. Criar ou Atualizar Usuários Padrão (Sem deletar usuários cadastrados via Admin)
   const adminPasswordHash = await bcrypt.hash('solaradmin123', 12);
   const userPasswordHash = await bcrypt.hash('tecnico123', 12);
 
-  // 3. Criar Usuários
-  const admin = await prisma.user.create({
-    data: {
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@solar.com' },
+    update: {},
+    create: {
       email: 'admin@solar.com',
       name: 'Supervisor Solar',
       passwordHash: adminPasswordHash,
@@ -34,8 +30,10 @@ async function main() {
     }
   });
 
-  const tech = await prisma.user.create({
-    data: {
+  const tech = await prisma.user.upsert({
+    where: { email: 'tecnico@solar.com' },
+    update: {},
+    create: {
       email: 'tecnico@solar.com',
       name: 'Técnico de Instalação',
       passwordHash: userPasswordHash,
@@ -43,13 +41,15 @@ async function main() {
     }
   });
 
-  console.log('✓ Usuários criados:');
+  console.log('✓ Usuários padrão garantidos:');
   console.log('  - Admin: admin@solar.com / solaradmin123');
   console.log('  - Técnico: tecnico@solar.com / tecnico123');
 
-  // 4. Criar Categorias
-  const catInstalacao = await prisma.category.create({
-    data: {
+  // 2. Criar ou Atualizar Categorias
+  const catInstalacao = await prisma.category.upsert({
+    where: { slug: 'instalacao-fisica' },
+    update: {},
+    create: {
       name: 'Instalação Física de Dispositivos',
       slug: 'instalacao-fisica',
       description: 'Guias com esquemas de fiação elétrica e locais físicos de instalação nos veículos.',
@@ -57,8 +57,10 @@ async function main() {
     }
   });
 
-  const catSistemas = await prisma.category.create({
-    data: {
+  const catSistemas = await prisma.category.upsert({
+    where: { slug: 'plataformas-sistemas' },
+    update: {},
+    create: {
       name: 'Plataformas e Sistemas',
       slug: 'plataformas-sistemas',
       description: 'Treinamento de softwares operacionais, autenticação e uso do Scuti.',
@@ -66,8 +68,10 @@ async function main() {
     }
   });
 
-  const catCadastro = await prisma.category.create({
-    data: {
+  const catCadastro = await prisma.category.upsert({
+    where: { slug: 'procedimentos-cadastro' },
+    update: {},
+    create: {
       name: 'Procedimentos de Cadastro',
       slug: 'procedimentos-cadastro',
       description: 'Procedimentos de cadastro correto no Vanguarda',
@@ -75,14 +79,16 @@ async function main() {
     }
   });
 
-  console.log('✓ Categorias criadas.');
+  console.log('✓ Categorias criadas/garantidas.');
 
-  // 5. Criar Artigos de Exemplo
-  await prisma.article.create({
-    data: {
-      title: 'Cadastro de Pessoas',
-      slug: 'cadastro-de-pessoas',
-      categoryId: catCadastro.id,
+  // 3. Criar Artigos de Exemplo (se não existirem)
+  const existingArticleCount = await prisma.article.count();
+  if (existingArticleCount === 0) {
+    await prisma.article.create({
+      data: {
+        title: 'Cadastro de Pessoas',
+        slug: 'cadastro-de-pessoas',
+        categoryId: catCadastro.id,
       contentMarkdown: `# Cadastro de Pessoas no Vanguarda
 
 Guia passo a passo para o cadastro, atualização e gestão de usuários (Condutores e Supervisores) na plataforma Vanguarda da operação Solar Coca-Cola, garantindo elegibilidade ao Ranking de Motoristas e acesso ao aplicativo mobile.
@@ -1740,6 +1746,272 @@ Os eventos de **Manutenção Preventiva** destacam a importância da inspeção 
   });
 
   console.log('✓ Artigos de exemplo semeados.');
+  } else {
+    console.log('✓ Artigos já existem no banco. Pulando criação de artigos padrão.');
+  }
+
+  await prisma.article.upsert({
+    where: { slug: 'como-utilizar-o-painel-de-telemetria' },
+    update: {
+      title: 'Como utilizar o Painel de Telemetria',
+      categoryId: catSistemas.id,
+      contentMarkdown: `# Como utilizar o Painel de Telemetria
+
+Guia completo sobre a navegação, filtros de busca, interpretação dos pilares de condução, consulta de notas e auditoria de infrações no Painel de Telemetria da Solar Coca-Cola.
+
+---
+
+## 📌 1. Visão Geral e Acesso ao Painel
+
+O **Painel de Telemetria** é o coração da operação para análise dos eventos e infrações dos condutores da Solar Coca-Cola. É nele que fica concentrada a performance dos condutores e o acompanhamento de como estão conduzindo os veículos da frota.
+
+### 🌐 Como acessar:
+Na barra lateral (*sidebar*) da plataforma, clique no ícone da Solar e selecione **Painel de Telemetria**.
+
+![Acesso ao Painel de Telemetria via Sidebar](/images/painel_telemetria/picture1_paineltelemetria.png)
+
+---
+
+## 🔍 2. Filtros de Pesquisa e Regras de Equipamentos
+
+Para realizar uma consulta no painel, preencha os campos de filtro conforme as orientações abaixo:
+
+| Campo | Preenchimento | Regra / Comportamento no Sistema |
+| :--- | :--- | :--- |
+| **Cliente** | **Obrigatório** | Selecionar a unidade operacional que deseja verificar. |
+| **Equipe** | *Opcional* | • **Se preenchido:** Exibe os condutores e a média específica daquela equipe.<br>• **Se em branco:** Traz os dados de todas as equipes e exibe a média geral da unidade. |
+| **Data Inicial e Final** | **Obrigatório** | Define o período específico para extração da análise. |
+| **Tipo de Veículos** | Selection Box | Categorias disponíveis: **Pesados** (Caminhões) e **Motos**. |
+
+### 🛠️ Regra de Interpretação por Equipamento:
+> ⚠️ **ATENÇÃO AO DISPOSITIVO INSTALADO:**  
+> O fator determinante para o sistema interpretar um veículo como **Pesado** ou **Moto** é o modelo do equipamento instalado:
+> * Dispositivos **ST4305** ➔ Interpretados pelo sistema como **Moto**.
+> * Dispositivos **VIRLOC6** ➔ Interpretados pelo sistema como **Caminhão (Pesado)**.
+> 
+> 💡 **Resolução de Inconsistências:** Como alguns caminhões possuem o rastreador ST4305 instalado (ex: frota antiga), eles serão interpretados no sistema como "Moto". Caso encontre divergência na extração do relatório, verifique qual equipamento está instalado no veículo antes de visualizar os dados.
+
+Após preencher todos os campos necessários, clique no botão **Pesquisar**.
+
+---
+
+## 📊 3. Pilares de Condução e Eventos Monitorados
+
+Ao realizar a pesquisa (como no exemplo com equipe inserida), o painel exibirá o card **"Avaliação Geral"** com a média da equipe e a divisão por pilares de condução.
+
+![Visualização do Painel com Equipe e Avaliação Geral](/images/painel_telemetria/picture2_paineltelemetria.png)
+
+### 🏍️ 3.1. Pilares para Frota de Motos (3 Pilares)
+
+1. 🛠️ **Manutenção:**
+   * **Evento monitorado:** *Checklist não realizado*.
+2. 🛡️ **Segurança:**
+   * **Eventos monitorados:** *Aceleração Brusca*, *Curva Brusca* (ambos com severidades leve, média e alta) e *Velocidade Máxima da Via*.
+   * > 💡 **Regra de Severidade:** Apenas os eventos de severidade **média e alta** descontam pontos da nota do condutor. Eventos de severidade **leve** servem apenas para notificação educacional ao condutor.
+3. ⏱️ **Jornada:**
+   * **Evento monitorado:** *Movimentação em horário indevido*.
+
+---
+
+### 🚚 3.2. Pilares para Frota de Veículos Pesados / Caminhões (4 Pilares)
+
+1. 🛡️ **Segurança:** *Aceleração Brusca*, *Curva Brusca* e *Velocidade Máxima da Via*.
+2. ⚡ **Performance:** *Faixa Amarela*, *Faixa Vermelha* e *Excesso de tempo parado com Ignição ligada*.
+3. 🛠️ **Manutenção:** *Checklist não realizado*.
+4. 📹 **VídeoTelemetria:** *Fadiga ao dirigir*, *Distração do condutor*, *Condutor sem cinto de segurança*, *Uso de celular em condução*, *Fumando ao conduzir* e *Veículo dianteiro muito próximo*.
+
+> ⚖️ **REGRA DE COMPOSIÇÃO DA MÉDIA DE PESADOS:**  
+> Para calcular a média dos caminhões, **apenas 3 pilares são computados** (*Segurança*, *Manutenção* e *Performance*). O pilar de **VídeoTelemetria** fica temporariamente fora da média geral para garantir a equidade com veículos que ainda não possuem câmeras instaladas.
+
+---
+
+## 📉 4. Comparativo de Pontuação e Acesso ao Condutor
+
+Todos os condutores iniciam a jornada com **nota 100** e vão perdendo pontuação conforme cometem infrações.
+
+Ao clicar em qualquer pilar para investigar o motivo de uma nota reduzida, o painel abre a seção **"Comparativo de pontuação"**, apresentando a lista de condutores em ordem **decrescente** (da maior nota para a menor nota).
+
+Para detalhar o comportamento de um colaborador, clique diretamente sobre o **nome do condutor** para ser direcionado à tela **Painel de Motorista**.
+
+![Seleção do Condutor no Comparativo de Pontuação](/images/painel_telemetria/picture3_paineltelemetria.png)
+
+---
+
+## 👤 5. Painel do Motorista e Detalhes da Operação
+
+Ao abrir a nova aba do **Painel do Motorista**, os filtros já serão carregados preenchidos. É possível visualizar todas as informações do condutor, média geral, notas individuais por pilar e o card **"Detalhes da Operação"**, composto por 3 sub-abas:
+
+![Painel do Motorista com Filtros Preenchidos e Detalhes](/images/painel_telemetria/picture4_paineltelemetria.png)
+
+### 📋 5.1. Sub-aba: "Infrações"
+* Exibe a lista completa de infrações registradas para o condutor no período.
+* **Aplicação de Feedback:** Marque a checkbox da infração e clique em **"Adicionar Feedback"** para registrar a tratativa efetuada pelo supervisor de equipe.
+* **Auditoria de Evento:** Para visualizar o local e o momento exato em que a infração ocorreu, clique nos **três pontos ("...")** da infração e selecione **Visualizar**.
+
+![Ação de Visualizar nos Três Pontos da Infração](/images/painel_telemetria/picture5_paineltelemetria.png)
+
+> 🔍 *Ao clicar em Visualizar, você será redirecionado para o mapa com os detalhes do evento para auditar a veracidade da ocorrência.*
+
+### 💬 5.2. Sub-aba: "Ações Educacionais"
+* Permite verificar as infrações que já possuem feedback aplicado.
+* Permite registrar **Elogios** para condutores que mantiveram boa conduta ao longo do mês.
+
+### 🚚 5.3. Sub-aba: "Viagens"
+* Exibe o histórico de veículos utilizados pelo condutor no período selecionado, com data e hora de início e término das conduções.
+
+---
+
+## 🎯 6. Notas por Pilar e Detalhamento da Avaliação
+
+Descendo a página do Painel do Motorista, é exibida a nota final do condutor com a separação por cada pilar de condução.
+
+![Nota por Pilar e Detalhamento de Infrações do Condutor](/images/painel_telemetria/picture6_paineltelemetria.png)
+
+No exemplo acima, o condutor perdeu pontuação exclusivamente no pilar de **Manutenção**, onde registrou **15 ocorrências** da infração **Checklist Não Realizado**.
+
+---
+
+## 💡 7. Resumo e Boas Práticas
+
+Com o Painel de Telemetria, a equipe de gestão e supervisão consegue:
+* 🔎 Fazer pesquisas dinâmicas por filiais e equipes;
+* 📈 Acompanhar o ranking e evolução das notas dos condutores;
+* 🛑 Identificar quais pilares e infrações estão impactando a segurança da unidade;
+* 📝 Aplicar feedbacks educativos e registrar elogios operacionais;
+* 🗺️ Auditar a localização e horários exatos de ocorrência de eventos.`
+    },
+    create: {
+      title: 'Como utilizar o Painel de Telemetria',
+      slug: 'como-utilizar-o-painel-de-telemetria',
+      categoryId: catSistemas.id,
+      contentMarkdown: `# Como utilizar o Painel de Telemetria
+
+Guia completo sobre a navegação, filtros de busca, interpretação dos pilares de condução, consulta de notas e auditoria de infrações no Painel de Telemetria da Solar Coca-Cola.
+
+---
+
+## 📌 1. Visão Geral e Acesso ao Painel
+
+O **Painel de Telemetria** é o coração da operação para análise dos eventos e infrações dos condutores da Solar Coca-Cola. É nele que fica concentrada a performance dos condutores e o acompanhamento de como estão conduzindo os veículos da frota.
+
+### 🌐 Como acessar:
+Na barra lateral (*sidebar*) da plataforma, clique no ícone da Solar e selecione **Painel de Telemetria**.
+
+![Acesso ao Painel de Telemetria via Sidebar](/images/painel_telemetria/picture1_paineltelemetria.png)
+
+---
+
+## 🔍 2. Filtros de Pesquisa e Regras de Equipamentos
+
+Para realizar uma consulta no painel, preencha os campos de filtro conforme as orientações abaixo:
+
+| Campo | Preenchimento | Regra / Comportamento no Sistema |
+| :--- | :--- | :--- |
+| **Cliente** | **Obrigatório** | Selecionar a unidade operacional que deseja verificar. |
+| **Equipe** | *Opcional* | • **Se preenchido:** Exibe os condutores e a média específica daquela equipe.<br>• **Se em branco:** Traz os dados de todas as equipes e exibe a média geral da unidade. |
+| **Data Inicial e Final** | **Obrigatório** | Define o período específico para extração da análise. |
+| **Tipo de Veículos** | Selection Box | Categorias disponíveis: **Pesados** (Caminhões) e **Motos**. |
+
+### 🛠️ Regra de Interpretação por Equipamento:
+> ⚠️ **ATENÇÃO AO DISPOSITIVO INSTALADO:**  
+> O fator determinante para o sistema interpretar um veículo como **Pesado** ou **Moto** é o modelo do equipamento instalado:
+> * Dispositivos **ST4305** ➔ Interpretados pelo sistema como **Moto**.
+> * Dispositivos **VIRLOC6** ➔ Interpretados pelo sistema como **Caminhão (Pesado)**.
+> 
+> 💡 **Resolução de Inconsistências:** Como alguns caminhões possuem o rastreador ST4305 instalado (ex: frota antiga), eles serão interpretados no sistema como "Moto". Caso encontre divergência na extração do relatório, verifique qual equipamento está instalado no veículo antes de visualizar os dados.
+
+Após preencher todos os campos necessários, clique no botão **Pesquisar**.
+
+---
+
+## 📊 3. Pilares de Condução e Eventos Monitorados
+
+Ao realizar a pesquisa (como no exemplo com equipe inserida), o painel exibirá o card **"Avaliação Geral"** com a média da equipe e a divisão por pilares de condução.
+
+![Visualização do Painel com Equipe e Avaliação Geral](/images/painel_telemetria/picture2_paineltelemetria.png)
+
+### 🏍️ 3.1. Pilares para Frota de Motos (3 Pilares)
+
+1. 🛠️ **Manutenção:**
+   * **Evento monitorado:** *Checklist não realizado*.
+2. 🛡️ **Segurança:**
+   * **Eventos monitorados:** *Aceleração Brusca*, *Curva Brusca* (ambos com severidades leve, média e alta) e *Velocidade Máxima da Via*.
+   * > 💡 **Regra de Severidade:** Apenas os eventos de severidade **média e alta** descontam pontos da nota do condutor. Eventos de severidade **leve** servem apenas para notificação educacional ao condutor.
+3. ⏱️ **Jornada:**
+   * **Evento monitorado:** *Movimentação em horário indevido*.
+
+---
+
+### 🚚 3.2. Pilares para Frota de Veículos Pesados / Caminhões (4 Pilares)
+
+1. 🛡️ **Segurança:** *Aceleração Brusca*, *Curva Brusca* e *Velocidade Máxima da Via*.
+2. ⚡ **Performance:** *Faixa Amarela*, *Faixa Vermelha* e *Excesso de tempo parado com Ignição ligada*.
+3. 🛠️ **Manutenção:** *Checklist não realizado*.
+4. 📹 **VídeoTelemetria:** *Fadiga ao dirigir*, *Distração do condutor*, *Condutor sem cinto de segurança*, *Uso de celular em condução*, *Fumando ao conduzir* e *Veículo dianteiro muito próximo*.
+
+> ⚖️ **REGRA DE COMPOSIÇÃO DA MÉDIA DE PESADOS:**  
+> Para calcular a média dos caminhões, **apenas 3 pilares são computados** (*Segurança*, *Manutenção* e *Performance*). O pilar de **VídeoTelemetria** fica temporariamente fora da média geral para garantir a equidade com veículos que ainda não possuem câmeras instaladas.
+
+---
+
+## 📉 4. Comparativo de Pontuação e Acesso ao Condutor
+
+Todos os condutores iniciam a jornada com **nota 100** e vão perdendo pontuação conforme cometem infrações.
+
+Ao clicar em qualquer pilar para investigar o motivo de uma nota reduzida, o painel abre a seção **"Comparativo de pontuação"**, apresentando a lista de condutores em ordem **decrescente** (da maior nota para a menor nota).
+
+Para detalhar o comportamento de um colaborador, clique diretamente sobre o **nome do condutor** para ser direcionado à tela **Painel de Motorista**.
+
+![Seleção do Condutor no Comparativo de Pontuação](/images/painel_telemetria/picture3_paineltelemetria.png)
+
+---
+
+## 👤 5. Painel do Motorista e Detalhes da Operação
+
+Ao abrir a nova aba do **Painel do Motorista**, os filtros já serão carregados preenchidos. É possível visualizar todas as informações do condutor, média geral, notas individuais por pilar e o card **"Detalhes da Operação"**, composto por 3 sub-abas:
+
+![Painel do Motorista com Filtros Preenchidos e Detalhes](/images/painel_telemetria/picture4_paineltelemetria.png)
+
+### 📋 5.1. Sub-aba: "Infrações"
+* Exibe a lista completa de infrações registradas para o condutor no período.
+* **Aplicação de Feedback:** Marque a checkbox da infração e clique em **"Adicionar Feedback"** para registrar a tratativa efetuada pelo supervisor de equipe.
+* **Auditoria de Evento:** Para visualizar o local e o momento exato em que a infração ocorreu, clique nos **três pontos ("...")** da infração e selecione **Visualizar**.
+
+![Ação de Visualizar nos Três Pontos da Infração](/images/painel_telemetria/picture5_paineltelemetria.png)
+
+> 🔍 *Ao clicar em Visualizar, você será redirecionado para o mapa com os detalhes do evento para auditar a veracidade da ocorrência.*
+
+### 💬 5.2. Sub-aba: "Ações Educacionais"
+* Permite verificar as infrações que já possuem feedback aplicado.
+* Permite registrar **Elogios** para condutores que mantiveram boa conduta ao longo do mês.
+
+### 🚚 5.3. Sub-aba: "Viagens"
+* Exibe o histórico de veículos utilizados pelo condutor no período selecionado, com data e hora de início e término das conduções.
+
+---
+
+## 🎯 6. Notas por Pilar e Detalhamento da Avaliação
+
+Descendo a página do Painel do Motorista, é exibida a nota final do condutor com a separação por cada pilar de condução.
+
+![Nota por Pilar e Detalhamento de Infrações do Condutor](/images/painel_telemetria/picture6_paineltelemetria.png)
+
+No exemplo acima, o condutor perdeu pontuação exclusivamente no pilar de **Manutenção**, onde registrou **15 ocorrências** da infração **Checklist Não Realizado**.
+
+---
+
+## 💡 7. Resumo e Boas Práticas
+
+Com o Painel de Telemetria, a equipe de gestão e supervisão consegue:
+* 🔎 Fazer pesquisas dinâmicas por filiais e equipes;
+* 📈 Acompanhar o ranking e evolução das notas dos condutores;
+* 🛑 Identificar quais pilares e infrações estão impactando a segurança da unidade;
+* 📝 Aplicar feedbacks educativos e registrar elogios operacionais;
+* 🗺️ Auditar a localização e horários exatos de ocorrência de eventos.`
+    }
+  });
+
+  console.log('✓ Tópico "Como utilizar o Painel de Telemetria" garantido no banco.');
   console.log('Seeding concluído com sucesso!');
 }
 
