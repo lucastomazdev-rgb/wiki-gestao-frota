@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { protect, restrictTo } from './middleware/auth.js';
+import createGestaoSolarRouter from './routes/gestaoSolar.js';
 
 dotenv.config();
 
@@ -23,9 +24,12 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
   process.exit(1);
 }
 
+app.disable('x-powered-by');
+
 // 🛡️ Security Middleware - Helmet HTTP Headers
 app.use(helmet({
-  contentSecurityPolicy: false // Permitir customização de recursos em dev/prod
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
 // 🌐 Suporte a Proxy Reverso (Render / Vercel / Cloudflare) para rate-limit e cookies seguros
@@ -37,7 +41,28 @@ app.use((req, res, next) => {
   next();
 });
 
-// ⚡ Rate Limiting para Login e Rotas de Auth
+// Validação de segurança para chave secreta JWT
+if (process.env.NODE_ENV === 'production') {
+  if (!JWT_SECRET || JWT_SECRET === 'dev-fallback-secret-key-change-in-production' || JWT_SECRET.length < 32) {
+    console.error('ERRO CRÍTICO DE SEGURANÇA: JWT_SECRET ausente ou vulnerável em ambiente de produção! Defina uma chave secreta com ao menos 32 caracteres.');
+    process.exit(1);
+  }
+}
+
+// ⚡ Rate Limiter Global para rotas da API (Proteção contra DoS)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 300, // limite de 300 requisições por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Muitas requisições enviadas por este IP. Por favor, tente novamente em alguns instantes.'
+  }
+});
+app.use('/api', apiLimiter);
+
+// ⚡ Rate Limiting estrito para Login e Rotas de Auth
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: 20, // limite de 20 tentativas por IP
@@ -49,18 +74,52 @@ const authLimiter = rateLimit({
   }
 });
 
-// Middleware Padrão
+// Middleware de CORS com validação estrita de origens
+const configuredClientUrls = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map(u => u.trim().replace(/\/+$/, ''))
+  : [];
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  ...configuredClientUrls
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Permitir chamadas sem cabeçalho Origin (curl, server-to-server, health-checks)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+
+    // Verificar correspondência exata com origens permitidas
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    // Permitir padrão regex configurado via variável de ambiente (se fornecido)
+    if (process.env.ALLOWED_ORIGIN_PATTERN && new RegExp(process.env.ALLOWED_ORIGIN_PATTERN).test(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origem [${origin}] não permitida pela política CORS.`));
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
 app.use('/images', express.static('public/images'));
 
-// Aplicar rate limiter apenas nas rotas de autenticação
+// Aplicar rate limiter específico nas rotas de autenticação
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
@@ -83,7 +142,8 @@ const registerSchema = z.object({
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'A senha deve ter no mínimo 6 caracteres'),
   name: z.string().min(2, 'O nome deve ter no mínimo 2 caracteres'),
-  role: z.enum(['USER', 'ADMIN']).optional()
+  role: z.enum(['USER', 'ADMIN']).optional(),
+  can_access_gestao_solar: z.boolean().optional()
 });
 
 const loginSchema = z.object({
@@ -106,6 +166,21 @@ const articleSchema = z.object({
 });
 
 // --- AUTHENTICATION ROUTES ---
+
+// Status de configuração inicial (informa se o sistema precisa de setup inicial de admin)
+app.get('/api/auth/setup-status', async (req, res, next) => {
+  try {
+    const userCount = await prisma.user.count();
+    res.status(200).json({
+      status: 'success',
+      data: {
+        requiresSetup: userCount === 0
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Register (Protegido: Apenas ADMINs podem cadastrar novos alunos/usuários, exceto na criação inicial do primeiro usuário)
 app.post('/api/auth/register', async (req, res, next) => {
@@ -158,20 +233,23 @@ app.post('/api/auth/register', async (req, res, next) => {
 
     // Se for o primeiro usuário da base, torna-o ADMIN por padrão; caso contrário, respeita a atribuição do ADMIN ou o padrão USER
     const assignedRole = userCount === 0 ? 'ADMIN' : (validatedData.role || 'USER');
+    const canAccessSolar = assignedRole === 'ADMIN' || Boolean(validatedData.can_access_gestao_solar);
 
     const user = await prisma.user.create({
       data: {
         email: validatedData.email,
         passwordHash,
         name: validatedData.name,
-        role: assignedRole
+        role: assignedRole,
+        can_access_gestao_solar: canAccessSolar
       }
     });
 
+    let token = null;
     // Se a requisição NÃO veio de um Admin já logado (ex: primeiro cadastro), define o cookie de login
     if (!isRequestFromAdmin) {
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, name: user.name },
+      token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role, name: user.name, can_access_gestao_solar: canAccessSolar },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES_IN }
       );
@@ -191,8 +269,10 @@ app.post('/api/auth/register', async (req, res, next) => {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
-        }
+          role: user.role,
+          can_access_gestao_solar: canAccessSolar
+        },
+        token: token || undefined
       }
     });
   } catch (error) {
@@ -213,9 +293,11 @@ app.post('/api/auth/login', async (req, res, next) => {
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha incorretos.' });
     }
 
+    const canAccessSolar = user.role === 'ADMIN' || Boolean(user.can_access_gestao_solar);
+
     // Sign JWT
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
+      { id: user.id, email: user.email, role: user.role, name: user.name, can_access_gestao_solar: canAccessSolar },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -235,8 +317,10 @@ app.post('/api/auth/login', async (req, res, next) => {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
-        }
+          role: user.role,
+          can_access_gestao_solar: canAccessSolar
+        },
+        token
       }
     });
   } catch (error) {
@@ -255,13 +339,36 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Get current session
-app.get('/api/auth/me', protect, (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    data: {
-      user: req.user
+app.get('/api/auth/me', protect, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        can_access_gestao_solar: true,
+        createdAt: true
+      }
+    });
+
+    if (!user) {
+      return res.status(401).json({ status: 'error', message: 'Usuário não encontrado.' });
     }
-  });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user: {
+          ...user,
+          can_access_gestao_solar: user.role === 'ADMIN' || Boolean(user.can_access_gestao_solar)
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // --- USER MANAGEMENT ROUTES (ADMIN ONLY) ---
@@ -275,6 +382,7 @@ app.get('/api/users', protect, restrictTo('ADMIN'), async (req, res, next) => {
         email: true,
         name: true,
         role: true,
+        can_access_gestao_solar: true,
         createdAt: true
       },
       orderBy: { createdAt: 'desc' }
@@ -284,6 +392,119 @@ app.get('/api/users', protect, restrictTo('ADMIN'), async (req, res, next) => {
     next(error);
   }
 });
+
+// Toggle Gestão Solar permission for a user (ADMIN)
+app.patch('/api/users/:id/gestao-solar', protect, restrictTo('ADMIN'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { can_access_gestao_solar } = req.body;
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        can_access_gestao_solar: Boolean(can_access_gestao_solar)
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        can_access_gestao_solar: true
+      }
+    });
+
+    res.status(200).json({ status: 'success', data: { user: updatedUser } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update user details (ADMIN)
+app.put('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, email, password, role, can_access_gestao_solar } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'Usuário não encontrado.' });
+    }
+
+    const dataToUpdate = {};
+
+    if (name !== undefined) {
+      if (!name || name.trim().length < 2) {
+        return res.status(400).json({ status: 'error', message: 'O nome deve ter no mínimo 2 caracteres.' });
+      }
+      dataToUpdate.name = name.trim();
+    }
+
+    if (email !== undefined) {
+      const emailNormalized = email.trim().toLowerCase();
+      if (!emailNormalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNormalized)) {
+        return res.status(400).json({ status: 'error', message: 'E-mail inválido.' });
+      }
+      if (emailNormalized !== user.email.toLowerCase()) {
+        const emailExists = await prisma.user.findFirst({
+          where: {
+            email: emailNormalized,
+            NOT: { id }
+          }
+        });
+        if (emailExists) {
+          return res.status(400).json({ status: 'error', message: 'Este e-mail já está cadastrado para outro usuário.' });
+        }
+      }
+      dataToUpdate.email = emailNormalized;
+    }
+
+    if (role !== undefined) {
+      if (!['USER', 'ADMIN'].includes(role)) {
+        return res.status(400).json({ status: 'error', message: 'Nível de acesso inválido.' });
+      }
+      // Se estiver alterando o próprio usuário para não-ADMIN, verificar se restam outros admins
+      if (id === req.user.id && role !== 'ADMIN') {
+        const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+        if (adminCount <= 1) {
+          return res.status(400).json({ status: 'error', message: 'Você não pode remover privilégios de administrador da sua conta pois é o único administrador.' });
+        }
+      }
+      dataToUpdate.role = role;
+    }
+
+    if (can_access_gestao_solar !== undefined) {
+      dataToUpdate.can_access_gestao_solar = Boolean(can_access_gestao_solar);
+    }
+
+    if (password && password.trim().length > 0) {
+      if (password.length < 6) {
+        return res.status(400).json({ status: 'error', message: 'A nova senha deve ter no mínimo 6 caracteres.' });
+      }
+      dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: dataToUpdate,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        can_access_gestao_solar: true,
+        createdAt: true
+      }
+    });
+
+    res.status(200).json({ status: 'success', data: { user: updatedUser } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+// Montar rotas da Gestão Solar
+app.use('/api', createGestaoSolarRouter(prisma));
 
 // Delete a user
 app.delete('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {

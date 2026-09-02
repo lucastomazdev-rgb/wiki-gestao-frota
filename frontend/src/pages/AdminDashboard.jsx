@@ -3,8 +3,8 @@ import { api } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmModal from '../components/ui/ConfirmModal';
-import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book, Users, UserPlus, ShieldCheck, UserCheck } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book, Users, UserPlus, ShieldCheck, UserCheck, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUpdated }) {
   const toast = useToast();
@@ -30,11 +30,13 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
 
 
   // User Management State
-  const [showUserForm, setShowUserForm] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUserId, setEditingUserId] = useState(null);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userRole, setUserRole] = useState('USER');
+  const [userCanAccessSolar, setUserCanAccessSolar] = useState(false);
   const [userSubmitting, setUserSubmitting] = useState(false);
 
   const fetchUsers = async () => {
@@ -43,6 +45,17 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
       setUsers(res.data.data.users || []);
     } catch (err) {
       console.error('Erro ao carregar usuários:', err);
+    }
+  };
+
+  const handleToggleGestaoSolar = async (userId, currentVal) => {
+    try {
+      const newVal = !currentVal;
+      await api.patch(`/users/${userId}/gestao-solar`, { can_access_gestao_solar: newVal });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, can_access_gestao_solar: newVal } : u));
+      toast.success('Permissão de Gestão Solar atualizada!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erro ao atualizar permissão.');
     }
   };
   
@@ -94,29 +107,76 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
     fetchUsers();
   }, []);
 
-  const handleCreateUser = async (e) => {
+  const handleOpenNewUserModal = () => {
+    setEditingUserId(null);
+    setUserName('');
+    setUserEmail('');
+    setUserPassword('');
+    setUserRole('USER');
+    setUserCanAccessSolar(false);
+    setShowUserModal(true);
+  };
+
+  const handleEditUser = (u) => {
+    setEditingUserId(u.id);
+    setUserName(u.name || '');
+    setUserEmail(u.email || '');
+    setUserPassword('');
+    setUserRole(u.role || 'USER');
+    setUserCanAccessSolar(Boolean(u.can_access_gestao_solar));
+    setShowUserModal(true);
+  };
+
+  const handleCloseUserModal = () => {
+    setShowUserModal(false);
+    setEditingUserId(null);
+    setUserName('');
+    setUserEmail('');
+    setUserPassword('');
+    setUserRole('USER');
+    setUserCanAccessSolar(false);
+  };
+
+  const handleSaveUser = async (e) => {
     e.preventDefault();
-    if (!userName || !userEmail || !userPassword) {
-      toast.error('Preencha nome, e-mail e senha para cadastrar um novo usuário.', 'Formulário Incompleto');
+    if (!userName.trim() || !userEmail.trim()) {
+      toast.error('Preencha nome e e-mail.', 'Formulário Incompleto');
       return;
     }
+    if (!editingUserId && !userPassword) {
+      toast.error('Preencha a senha para cadastrar um novo usuário.', 'Formulário Incompleto');
+      return;
+    }
+
     setUserSubmitting(true);
     try {
-      await api.post('/auth/register', {
-        name: userName,
-        email: userEmail,
-        password: userPassword,
-        role: userRole
-      });
-      toast.success(`Usuário ${userName} (${userEmail}) cadastrado com sucesso!`, 'Novo Usuário');
-      setUserName('');
-      setUserEmail('');
-      setUserPassword('');
-      setUserRole('USER');
-      setShowUserForm(false);
+      if (editingUserId) {
+        const payload = {
+          name: userName.trim(),
+          email: userEmail.trim(),
+          role: userRole,
+          can_access_gestao_solar: userCanAccessSolar,
+        };
+        if (userPassword && userPassword.trim().length > 0) {
+          payload.password = userPassword.trim();
+        }
+
+        await api.put(`/users/${editingUserId}`, payload);
+        toast.success(`Cadastro do usuário "${userName}" atualizado com sucesso!`, 'Usuário Atualizado');
+      } else {
+        await api.post('/auth/register', {
+          name: userName.trim(),
+          email: userEmail.trim(),
+          password: userPassword,
+          role: userRole,
+          can_access_gestao_solar: userCanAccessSolar
+        });
+        toast.success(`Usuário "${userName}" cadastrado com sucesso!`, 'Novo Usuário');
+      }
+      handleCloseUserModal();
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Falha ao cadastrar usuário.', 'Erro no Cadastro');
+      toast.error(err.response?.data?.message || 'Falha ao salvar usuário.', 'Erro');
     } finally {
       setUserSubmitting(false);
     }
@@ -757,88 +817,13 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
               <div className="flex justify-between items-center">
                 <span className="text-xs font-sans text-slate-400 font-medium">Gestão de usuários e técnicos cadastrados</span>
                 <button
-                  onClick={() => setShowUserForm(!showUserForm)}
+                  type="button"
+                  onClick={handleOpenNewUserModal}
                   className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-sans font-semibold flex items-center gap-2 shadow-md shadow-amber-950/20 transition-all cursor-pointer"
                 >
-                  <UserPlus size={16} /> {showUserForm ? 'Cancelar' : 'Novo Usuário'}
+                  <UserPlus size={16} /> Novo Usuário
                 </button>
               </div>
-
-              {showUserForm && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-6 bg-slate-900/70 border border-white/10 rounded-3xl space-y-4 shadow-xl"
-                >
-                  <h3 className="text-sm font-sans text-amber-400 font-bold flex items-center gap-2">
-                    <UserPlus size={18} /> Cadastrar Novo Usuário / Técnico
-                  </h3>
-                  <form onSubmit={handleCreateUser} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">Nome Completo *</label>
-                        <input
-                          type="text"
-                          value={userName}
-                          onChange={(e) => setUserName(e.target.value)}
-                          placeholder="Ex: Carlos Andrade"
-                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">E-mail *</label>
-                        <input
-                          type="email"
-                          value={userEmail}
-                          onChange={(e) => setUserEmail(e.target.value)}
-                          placeholder="carlos@solar.com"
-                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">Senha Inicial *</label>
-                        <input
-                          type="password"
-                          value={userPassword}
-                          onChange={(e) => setUserPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-sans text-slate-300 mb-1 font-medium">Nível de Acesso</label>
-                        <select
-                          value={userRole}
-                          onChange={(e) => setUserRole(e.target.value)}
-                          className="w-full bg-slate-800/70 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
-                        >
-                          <option value="USER">USER (Técnico / Consulta)</option>
-                          <option value="ADMIN">ADMIN (Supervisor / Administrador)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowUserForm(false)}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-sans cursor-pointer transition-colors font-medium"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={userSubmitting}
-                        className="px-6 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-sans font-semibold shadow-md shadow-amber-950/20 cursor-pointer disabled:opacity-50 transition-all"
-                      >
-                        {userSubmitting ? 'Cadastrando...' : 'Cadastrar Usuário'}
-                      </button>
-                    </div>
-                  </form>
-                </motion.div>
-              )}
 
               {/* Users List Table */}
               <div className="bg-slate-900/70 border border-white/10 rounded-3xl overflow-hidden shadow-xl">
@@ -848,6 +833,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                       <th className="py-3.5 px-6">Nome</th>
                       <th className="py-3.5 px-6">E-mail</th>
                       <th className="py-3.5 px-6">Nível de Acesso</th>
+                      <th className="py-3.5 px-6 text-center">Gestão Solar</th>
                       <th className="py-3.5 px-6 text-right">Ações</th>
                     </tr>
                   </thead>
@@ -872,14 +858,40 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-6 text-right">
+                        <td className="py-3.5 px-6 text-center">
                           <button
-                            onClick={() => handleDeleteUser(u.id, u.name)}
-                            className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
-                            title="Excluir Usuário"
+                            type="button"
+                            onClick={() => handleToggleGestaoSolar(u.id, u.can_access_gestao_solar)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                              u.role === 'ADMIN' || u.can_access_gestao_solar
+                                ? 'bg-teal-500/15 border-teal-500/30 text-teal-300 hover:bg-teal-500/25'
+                                : 'bg-slate-800 border-white/10 text-slate-400 hover:border-white/20'
+                            }`}
+                            title={u.role === 'ADMIN' ? 'Administrador possui acesso permanente' : 'Clique para alternar permissão de Gestão Solar'}
                           >
-                            <Trash2 size={16} />
+                            <span className={`w-2 h-2 rounded-full ${u.role === 'ADMIN' || u.can_access_gestao_solar ? 'bg-teal-400' : 'bg-slate-500'}`} />
+                            <span>{u.role === 'ADMIN' || u.can_access_gestao_solar ? 'Liberado' : 'Bloqueado'}</span>
                           </button>
+                        </td>
+                        <td className="py-3.5 px-6 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleEditUser(u)}
+                              className="p-2 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="Alterar Cadastro do Usuário"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u.id, u.name)}
+                              className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir Usuário"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1025,6 +1037,150 @@ RESPOSTA: SETIP OK
         onConfirm={executeConfirmDelete}
         onCancel={closeDeleteModal}
       />
+
+      {/* Modal de Cadastro / Edição de Usuário */}
+      <AnimatePresence>
+        {showUserModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', duration: 0.3 }}
+              className="relative w-full max-w-xl bg-slate-900/95 backdrop-blur-2xl border border-amber-500/30 shadow-[0_0_50px_rgba(245,158,11,0.15)] rounded-3xl p-6 sm:p-8 text-white space-y-5"
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={handleCloseUserModal}
+                className="absolute top-5 right-5 p-1.5 text-slate-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+
+              {/* Modal Header */}
+              <div className="flex items-center gap-3.5 border-b border-white/10 pb-4 pr-8">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                  {editingUserId ? <Edit2 size={22} /> : <UserPlus size={22} />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-sans tracking-tight">
+                    {editingUserId ? 'Alterar Cadastro do Usuário' : 'Cadastrar Novo Usuário / Técnico'}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-sans mt-0.5">
+                    {editingUserId
+                      ? 'Atualize as informações cadastrais, perfil de acesso e permissões'
+                      : 'Cadastre um novo técnico ou administrador com acesso à plataforma'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSaveUser} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+                      Nome Completo *
+                    </label>
+                    <input
+                      type="text"
+                      value={userName}
+                      onChange={(e) => setUserName(e.target.value)}
+                      placeholder="Ex: Carlos Andrade"
+                      className="w-full bg-slate-800/80 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
+                      required
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+                      E-mail *
+                    </label>
+                    <input
+                      type="email"
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      placeholder="carlos@solar.com"
+                      className="w-full bg-slate-800/80 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+                      {editingUserId ? 'Nova Senha (Opcional)' : 'Senha Inicial *'}
+                    </label>
+                    <input
+                      type="password"
+                      value={userPassword}
+                      onChange={(e) => setUserPassword(e.target.value)}
+                      placeholder={editingUserId ? 'Deixar em branco para manter' : 'Mínimo 6 caracteres'}
+                      className="w-full bg-slate-800/80 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
+                      required={!editingUserId}
+                    />
+                    {editingUserId && (
+                      <span className="text-[11px] text-slate-400 mt-1 block">
+                        Deixe em branco se não quiser alterar a senha.
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+                      Nível de Acesso
+                    </label>
+                    <select
+                      value={userRole}
+                      onChange={(e) => setUserRole(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans cursor-pointer"
+                    >
+                      <option value="USER">USER (Técnico / Consulta)</option>
+                      <option value="ADMIN">ADMIN (Supervisor / Administrador)</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2 border-t border-white/10">
+                    <label className="flex items-center gap-2.5 cursor-pointer text-xs font-sans text-slate-300 select-none">
+                      <input
+                        type="checkbox"
+                        checked={userCanAccessSolar}
+                        onChange={(e) => setUserCanAccessSolar(e.target.checked)}
+                        className="w-4 h-4 rounded-md border-white/20 text-teal-500 focus:ring-teal-500/20 bg-slate-800 cursor-pointer"
+                      />
+                      <span>
+                        Liberar acesso ao módulo <strong className="text-teal-400 font-semibold">Gestão Solar</strong> (Monitoramento de Frota)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={handleCloseUserModal}
+                    className="px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl text-xs font-sans font-semibold transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={userSubmitting}
+                    className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-sans text-xs font-semibold rounded-xl transition-all shadow-md shadow-amber-950/20 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {userSubmitting ? (
+                      <span>Salvando...</span>
+                    ) : (
+                      <span>{editingUserId ? 'Salvar Alterações' : 'Cadastrar Usuário'}</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

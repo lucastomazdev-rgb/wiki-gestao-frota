@@ -1,25 +1,21 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-}
-
 generator client {
   provider = "prisma-client-js"
 }
 
-enum Role {
-  USER
-  ADMIN
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         Role     @default(USER)
-  createdAt    DateTime @default(now())
+  id                      String   @id @default(uuid())
+  email                   String   @unique
+  passwordHash            String
+  name                    String
+  role                    Role     @default(USER)
+  createdAt               DateTime @default(now())
+  can_access_gestao_solar Boolean? @default(false)
 }
 
 model Category {
@@ -42,9 +38,87 @@ model Article {
   viewCount       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-  
   categoryId      String
   category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@index([categoryId])
+}
+
+model instalacoes {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  descricao_veiculo    String?               @db.VarChar(255)
+  modulo               String?               @db.VarChar(100)
+  operacao             String?               @db.VarChar(100)
+  placa                String                @db.VarChar(30)
+  data_instalacao      DateTime?             @db.Date
+  unidade_id           Int?
+  modelo_id            Int?
+  criado_em            DateTime              @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  modelos_rastreadores modelos_rastreadores? @relation(fields: [modelo_id], references: [id], onUpdate: NoAction)
+  unidades_clientes    unidades_clientes?    @relation(fields: [unidade_id], references: [id], onUpdate: NoAction)
+
+  @@index([modelo_id], map: "idx_instalacoes_modelo_id")
+  @@index([placa], map: "idx_instalacoes_placa")
+  @@index([unidade_id], map: "idx_instalacoes_unidade_id")
+}
+
+model log_movimentacoes {
+  id                                                                        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  placa                                                                     String             @db.VarChar(30)
+  tipo                                                                      String             @default("TRANSFERENCIA") @db.VarChar(50)
+  unidade_origem_id                                                         Int?
+  unidade_destino_id                                                        Int?
+  usuario_id                                                                String?
+  data_movimentacao                                                         DateTime           @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  criado_em                                                                 DateTime           @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  unidades_clientes_log_movimentacoes_unidade_destino_idTounidades_clientes unidades_clientes? @relation("log_movimentacoes_unidade_destino_idTounidades_clientes", fields: [unidade_destino_id], references: [id], onUpdate: NoAction)
+  unidades_clientes_log_movimentacoes_unidade_origem_idTounidades_clientes  unidades_clientes? @relation("log_movimentacoes_unidade_origem_idTounidades_clientes", fields: [unidade_origem_id], references: [id], onUpdate: NoAction)
+
+  @@index([data_movimentacao], map: "idx_log_mov_data")
+  @@index([placa], map: "idx_log_mov_placa")
+}
+
+model modelos_rastreadores {
+  id                Int           @id @default(autoincrement())
+  nome_modelo       String        @db.VarChar(200)
+  tipo_veiculo      String        @db.VarChar(100)
+  valor_instalacao  Decimal?      @default(0) @db.Decimal(10, 2)
+  valor_mensalidade Decimal?      @default(0) @db.Decimal(10, 2)
+  criado_em         DateTime      @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  instalacoes       instalacoes[]
+  retiradas         retiradas[]
+}
+
+model retiradas {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  placa                String                @db.VarChar(30)
+  status               String?               @default("Retirado") @db.VarChar(100)
+  data_retirada        DateTime?             @db.Date
+  unidade_id           Int?
+  modelo_id            Int?
+  motivo               String?
+  criado_em            DateTime              @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  modelos_rastreadores modelos_rastreadores? @relation(fields: [modelo_id], references: [id], onUpdate: NoAction)
+  unidades_clientes    unidades_clientes?    @relation(fields: [unidade_id], references: [id], onUpdate: NoAction)
+
+  @@index([data_retirada], map: "idx_retiradas_data")
+  @@index([placa], map: "idx_retiradas_placa")
+}
+
+model unidades_clientes {
+  id                                                                        Int                 @id @default(autoincrement())
+  nome_unidade                                                              String              @db.VarChar(200)
+  cod_cliente                                                               Int?
+  razao_social                                                              String?             @db.VarChar(300)
+  uf                                                                        String?             @db.Char(2)
+  criado_em                                                                 DateTime            @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  instalacoes                                                               instalacoes[]
+  log_movimentacoes_log_movimentacoes_unidade_destino_idTounidades_clientes log_movimentacoes[] @relation("log_movimentacoes_unidade_destino_idTounidades_clientes")
+  log_movimentacoes_log_movimentacoes_unidade_origem_idTounidades_clientes  log_movimentacoes[] @relation("log_movimentacoes_unidade_origem_idTounidades_clientes")
+  retiradas                                                                 retiradas[]
+}
+
+enum Role {
+  USER
+  ADMIN
 }

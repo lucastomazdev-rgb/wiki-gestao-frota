@@ -1,12 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import api, { setStoredToken, clearStoredToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
-export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
-  withCredentials: true
-});
+export { api };
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -19,6 +16,7 @@ export const AuthProvider = ({ children }) => {
       response => response,
       error => {
         if (error.response && error.response.status === 401) {
+          clearStoredToken();
           setUser(null);
         }
         return Promise.reject(error);
@@ -36,6 +34,7 @@ export const AuthProvider = ({ children }) => {
           setUser(response.data.data.user);
         }
       } catch (err) {
+        clearStoredToken();
         setUser(null);
       } finally {
         setLoading(false);
@@ -50,7 +49,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data.status === 'success') {
-        setUser(response.data.data.user);
+        const { user: userData, token } = response.data.data;
+        if (token) {
+          setStoredToken(token);
+        }
+        setUser(userData);
         return true;
       }
     } catch (err) {
@@ -68,7 +71,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.post('/auth/register', { email, password, name });
       if (response.data.status === 'success') {
-        setUser(response.data.data.user);
+        const { user: userData, token } = response.data.data;
+        if (token) {
+          setStoredToken(token);
+        }
+        setUser(userData);
         return true;
       }
     } catch (err) {
@@ -84,16 +91,22 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       await api.post('/auth/logout');
-      setUser(null);
     } catch (err) {
       console.error('Logout failed:', err);
     } finally {
+      clearStoredToken();
+      setUser(null);
       setLoading(false);
     }
   };
 
+  const getNomePerfil = () => {
+    if (!user) return 'Convidado';
+    return user.role === 'ADMIN' ? 'Supervisor' : 'Técnico';
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, register, logout, setUser }}>
+    <AuthContext.Provider value={{ user, loading, error, login, register, logout, setUser, getNomePerfil }}>
       {children}
     </AuthContext.Provider>
   );

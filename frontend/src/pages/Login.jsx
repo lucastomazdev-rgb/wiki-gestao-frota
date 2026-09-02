@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, User, AlertCircle, Loader, BookOpen } from 'lucide-react';
+import api from '../services/api';
+import { Mail, Lock, User, AlertCircle, Loader, BookOpen, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Login() {
   const { login, register } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
+  const [requiresSetup, setRequiresSetup] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -13,6 +15,19 @@ export default function Login() {
   const [validationErrors, setValidationErrors] = useState({});
   const [apiError, setApiError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.get('/auth/setup-status')
+      .then(res => {
+        if (isMounted && res.data?.data?.requiresSetup) {
+          setRequiresSetup(true);
+          setIsRegister(true);
+        }
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
 
   const validateForm = () => {
     const errors = {};
@@ -79,7 +94,7 @@ export default function Login() {
             Solar Frota Wiki
           </h1>
           <p className="text-xs font-sans text-amber-400 font-medium mt-1.5">
-            Controle de Acesso Operacional
+            {requiresSetup ? 'Configuração Inicial do Administrador' : 'Controle de Acesso Operacional'}
           </p>
         </div>
 
@@ -175,26 +190,21 @@ export default function Login() {
           >
             {isSubmitting ? (
               <Loader size={16} className="animate-spin" />
-            ) : isRegister ? (
-              'Criar Cadastro Técnico'
+            ) : requiresSetup ? (
+              'Criar Administrador do Sistema'
             ) : (
               'Autenticar Acesso'
             )}
           </motion.button>
         </form>
 
-        <div className="mt-6 text-center border-t border-white/10 pt-4">
-          <button
-            onClick={() => {
-              setIsRegister(!isRegister);
-              setValidationErrors({});
-              setApiError('');
-            }}
-            className="text-xs text-slate-400 hover:text-amber-400 transition-colors font-sans font-medium"
-          >
-            {isRegister ? 'Já tenho login operacional' : 'Criar novo acesso técnico'}
-          </button>
-        </div>
+        {requiresSetup && (
+          <div className="mt-6 text-center border-t border-white/10 pt-4">
+            <p className="text-[11px] text-amber-400 font-sans">
+              Primeiro acesso detectado. Cadastre a conta de administrador para iniciar o sistema.
+            </p>
+          </div>
+        )}
       </motion.div>
     </div>
   );

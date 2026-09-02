@@ -16,7 +16,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    const secret = process.env.JWT_SECRET;
+    const secret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'dev-fallback-secret-key-change-in-production');
     if (!secret) {
       throw new Error('JWT_SECRET não está configurado nas variáveis de ambiente.');
     }
@@ -29,7 +29,8 @@ export const protect = async (req, res, next) => {
       id: decoded.id,
       email: decoded.email,
       role: decoded.role,
-      name: decoded.name
+      name: decoded.name,
+      can_access_gestao_solar: decoded.can_access_gestao_solar
     };
 
     next();
@@ -51,4 +52,14 @@ export const restrictTo = (...roles) => {
     }
     next();
   };
+};
+
+export const restrictToGestaoSolar = (req, res, next) => {
+  if (req.user?.role === 'ADMIN' || req.user?.can_access_gestao_solar) {
+    return next();
+  }
+  return res.status(403).json({
+    status: 'error',
+    message: 'Acesso negado. Seu usuário não tem permissão para acessar o módulo Gestão Solar.'
+  });
 };

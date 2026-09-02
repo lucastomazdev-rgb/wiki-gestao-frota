@@ -5,9 +5,12 @@ import { useAuth } from '../context/AuthContext';
 export default function TopBar({ 
   onToggleMobileSidebar, 
   currentTab, 
-  breadcrumbTitle
+  breadcrumbTitle,
+  onSwitchToSolar,
+  platformMode = 'wiki'
 }) {
   const { user } = useAuth();
+  const canAccessSolar = user?.role === 'ADMIN' || Boolean(user?.can_access_gestao_solar);
 
   const getTabLabel = () => {
     switch (currentTab) {
@@ -32,7 +35,7 @@ export default function TopBar({
         {/* Mobile menu trigger */}
         <button
           onClick={onToggleMobileSidebar}
-          className="md:hidden p-2 text-slate-300 hover:text-amber-400 bg-white/5 border border-white/10 rounded-xl transition-colors"
+          className="md:hidden p-2 text-slate-300 hover:text-amber-400 bg-white/5 border border-white/10 rounded-xl transition-colors cursor-pointer"
           title="Abrir Menu"
         >
           <Menu size={18} />
@@ -60,6 +63,18 @@ export default function TopBar({
 
       {/* Action shortcuts */}
       <div className="flex items-center gap-3 shrink-0">
+        {/* Switch to Gestão Solar Button */}
+        {canAccessSolar && (
+          <button
+            onClick={onSwitchToSolar}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-teal-500/15 to-emerald-500/15 hover:from-teal-500/25 hover:to-emerald-500/25 border border-teal-500/40 text-teal-300 hover:text-teal-200 rounded-xl text-xs font-sans font-black tracking-tight transition-all shadow-xs hover:shadow-teal-500/20 hover:shadow-md hover:scale-[1.02] active:scale-95 cursor-pointer"
+            title="Alternar para a plataforma Gestão Solar"
+          >
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+            <span>Gestão Solar</span>
+          </button>
+        )}
+
         {/* System indicator */}
         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-sans text-emerald-400 font-medium shadow-xs">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />

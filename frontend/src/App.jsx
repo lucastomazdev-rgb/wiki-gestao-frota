@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth, api } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ToastContainer from './components/ui/ToastContainer';
@@ -9,13 +11,43 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import ArticleDetail from './pages/ArticleDetail';
 import AdminDashboard from './pages/AdminDashboard';
-import { Download, FileText, ExternalLink, ShieldAlert, AlertCircle, RefreshCw, FolderOpen } from 'lucide-react';
+import SidebarGestaoSolar from './components/SidebarGestaoSolar';
+import TabelaVeiculos from './components/TabelaVeiculos';
+import { 
+  Download, 
+  FileText, 
+  ExternalLink, 
+  ShieldAlert, 
+  AlertCircle, 
+  RefreshCw, 
+  FolderOpen,
+  Truck,
+  ArrowLeft,
+  Menu,
+  ChevronRight
+} from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1
+    }
+  }
+});
 
 function AppContent() {
   const { user, loading } = useAuth();
   
-  // Navigation State: 'home' | 'search' | 'downloads' | 'admin' | 'article-detail'
+  // Platform Mode: 'wiki' | 'gestao_solar'
+  const [platformMode, setPlatformMode] = useState('wiki');
+
+  // Gestão Solar state
+  const [currentSolarTab, setCurrentSolarTab] = useState('veiculos');
+  const [mobileSolarSidebarOpen, setMobileSolarSidebarOpen] = useState(false);
+
+  // Wiki Navigation State: 'home' | 'search' | 'downloads' | 'admin' | 'article-detail'
   const [currentTab, setCurrentTab] = useState('home');
   const [selectedArticleSlug, setSelectedArticleSlug] = useState(null);
   const [selectedArticleTitle, setSelectedArticleTitle] = useState(null);
@@ -23,6 +55,8 @@ function AppContent() {
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [categories, setCategories] = useState([]);
+
+  const canAccessSolar = user?.role === 'ADMIN' || Boolean(user?.can_access_gestao_solar);
 
   const fetchCategories = () => {
     if (user) {
@@ -36,6 +70,13 @@ function AppContent() {
   useEffect(() => {
     fetchCategories();
   }, [user]);
+
+  // Se o usuário perder o acesso ou não tiver permissão, garante que fica na wiki
+  useEffect(() => {
+    if (!canAccessSolar && platformMode === 'gestao_solar') {
+      setPlatformMode('wiki');
+    }
+  }, [canAccessSolar, platformMode]);
 
   // Technical PDF manuals data for downloads tab
   const technicalFiles = [];
@@ -82,6 +123,81 @@ function AppContent() {
     setCurrentTab('home');
   };
 
+  // =========================================================================
+  // VIEWPORT: PLATAFORMA GESTÃO SOLAR (CLIENTE)
+  // =========================================================================
+  if (platformMode === 'gestao_solar' && canAccessSolar) {
+    return (
+      <div className="h-screen w-full flex flex-row overflow-hidden bg-slate-100 text-slate-800">
+        {/* Sidebar dedicada Gestão Solar */}
+        <SidebarGestaoSolar
+          currentSolarTab={currentSolarTab}
+          setCurrentSolarTab={setCurrentSolarTab}
+          onBackToWiki={() => setPlatformMode('wiki')}
+          mobileOpen={mobileSolarSidebarOpen}
+          setMobileOpen={setMobileSolarSidebarOpen}
+        />
+
+        {/* Viewport Principal da Gestão Solar */}
+        <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto bg-slate-100">
+          <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => setMobileSolarSidebarOpen(true)}
+                className="md:hidden p-2 text-slate-600 hover:text-teal-600 bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                title="Abrir Menu"
+              >
+                <Menu size={18} />
+              </button>
+
+              <nav className="flex items-center gap-2 text-xs font-sans truncate">
+                <span className="text-teal-700 font-extrabold bg-teal-50 border border-teal-200/80 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[11px]">
+                  Gestão Solar
+                </span>
+                <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-400" />
+                <span className="font-bold text-slate-700 hidden sm:inline">
+                  Frota Coca-Cola
+                </span>
+                <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-400" />
+                <span className="font-extrabold text-slate-900 truncate">
+                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : currentSolarTab}
+                </span>
+              </nav>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => setPlatformMode('wiki')}
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-slate-700 hover:text-amber-700 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                title="Retornar para a base de conhecimento Wiki"
+              >
+                <ArrowLeft size={14} />
+                <span className="hidden sm:inline">Voltar para a</span> Wiki
+              </button>
+
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-sans text-emerald-700 font-bold shadow-xs">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Sistema Operacional</span>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+            {currentSolarTab === 'veiculos' && (
+              <TabelaVeiculos />
+            )}
+          </main>
+        </div>
+
+        <Toaster position="top-right" />
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEWPORT: WIKI / BASE DE CONHECIMENTO
+  // =========================================================================
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-row relative overflow-x-hidden">
       {/* Sidebar Navigation */}
@@ -93,6 +209,7 @@ function AppContent() {
         onSelectCategory={handleSelectCategory}
         mobileOpen={mobileSidebarOpen}
         setMobileOpen={setMobileSidebarOpen}
+        onSwitchToSolar={() => setPlatformMode('gestao_solar')}
       />
 
       {/* Main Content Viewport */}
@@ -101,6 +218,8 @@ function AppContent() {
           onToggleMobileSidebar={() => setMobileSidebarOpen(true)}
           currentTab={currentTab}
           breadcrumbTitle={selectedArticleTitle}
+          onSwitchToSolar={() => setPlatformMode('gestao_solar')}
+          platformMode={platformMode}
         />
 
         <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 relative z-10">
@@ -201,6 +320,7 @@ function AppContent() {
       <Footer currentTab={currentTab === 'article-detail' ? 'home' : currentTab} setCurrentTab={handleTabChange} />
 
       {/* Global Toast Container */}
+      <Toaster position="top-right" />
       <ToastContainer />
     </div>
   );
@@ -208,11 +328,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
-

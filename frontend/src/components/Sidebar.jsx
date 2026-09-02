@@ -7,7 +7,8 @@ import {
   LogOut, 
   ChevronRight, 
   FolderOpen, 
-  X
+  X,
+  Truck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -18,9 +19,11 @@ export default function Sidebar({
   selectedCategoryId, 
   onSelectCategory,
   mobileOpen, 
-  setMobileOpen 
+  setMobileOpen,
+  onSwitchToSolar
 }) {
   const { user, logout } = useAuth();
+  const canAccessSolar = user?.role === 'ADMIN' || Boolean(user?.can_access_gestao_solar);
 
   const handleTabClick = (tabKey) => {
     setCurrentTab(tabKey);
@@ -112,6 +115,25 @@ export default function Sidebar({
             </motion.button>
           );
         })}
+
+        {/* Gestão Solar Client Platform Switcher */}
+        {canAccessSolar && (
+          <div className="pt-2 border-t border-white/5">
+            <button
+              onClick={() => {
+                if (onSwitchToSolar) onSwitchToSolar();
+                if (setMobileOpen) setMobileOpen(false);
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r from-teal-500/10 to-emerald-500/10 hover:from-teal-500/20 hover:to-emerald-500/20 border border-teal-500/30 hover:border-teal-500/50 text-teal-300 hover:text-teal-200 transition-all cursor-pointer shadow-xs group"
+            >
+              <div className="flex items-center gap-2.5">
+                <Truck size={16} className="text-teal-400 group-hover:scale-110 transition-transform" />
+                <span>Gestão Solar</span>
+              </div>
+              <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Categories Tree Navigation */}
