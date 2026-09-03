@@ -1,12 +1,21 @@
 import express from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import { protect, restrictToGestaoSolar } from '../middleware/auth.js';
+
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
+
+const SUPABASE_STORAGE_URL = process.env.SUPABASE_URL || 'https://fhqhuwvfehvrhfuogyie.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocWh1d3ZmZWh2cmhmdW9neWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDkyMzcsImV4cCI6MjA5OTg4NTIzN30.YMykOW34L88IlnkHXYBAdaEyszZ0ebAklRRnftVjhio';
 
 export default function createGestaoSolarRouter(prisma) {
   const router = express.Router();
 
   // Rotas exclusivas do módulo Gestão Solar com autenticação e validação de permissão
-  const gestaoSolarPaths = ['/instalacoes', '/unidades', '/modelos', '/retiradas', '/timeline'];
+  const gestaoSolarPaths = ['/instalacoes', '/unidades', '/modelos', '/retiradas', '/timeline', '/tutoriais'];
   router.use(gestaoSolarPaths, protect, restrictToGestaoSolar);
 
   // Helper date formatter
@@ -69,7 +78,16 @@ export default function createGestaoSolarRouter(prisma) {
             select: { id: true, nome_modelo: true, tipo_veiculo: true, valor_instalacao: true, valor_mensalidade: true }
           }
         },
-        orderBy: { criado_em: 'desc' }
+        orderBy: [
+          {
+            unidades_clientes: {
+              nome_unidade: 'asc'
+            }
+          },
+          {
+            placa: 'asc'
+          }
+        ]
       };
 
       if (paginated) {
@@ -305,27 +323,41 @@ export default function createGestaoSolarRouter(prisma) {
     }
   });
 
-  // Baixa / Retirada Operacional
-  router.post('/instalacoes/retirar', async (req, res, next) => {
+  // Baixa / Retirada Operacional (suporta /instalacoes/:id/retirar e /instalacoes/retirar)
+  const handleRetirarInstalacao = async (req, res, next) => {
     try {
-      const { placa, status, data_retirada } = req.body;
-      if (!placa) {
-        return res.status(400).json({ erro: 'Placa é obrigatória.' });
+      const id = req.params.id;
+      const { placa, status, data_retirada, motivo } = req.body;
+
+      let inst = null;
+      if (id) {
+        inst = await prisma.instalacoes.findUnique({
+          where: { id }
+        });
       }
 
-      const upperPlaca = placa.trim().toUpperCase();
-      const inst = await prisma.instalacoes.findFirst({
-        where: { placa: upperPlaca }
-      });
+      if (!inst && placa) {
+        const upperPlaca = placa.trim().toUpperCase();
+        inst = await prisma.instalacoes.findFirst({
+          where: { placa: upperPlaca }
+        });
+      }
+
+      if (!inst && !placa) {
+        return res.status(400).json({ erro: 'Identificador do veículo ou placa é obrigatório.' });
+      }
+
+      const placaFinal = inst ? inst.placa : (placa ? placa.trim().toUpperCase() : '');
 
       // Cria registro na tabela retiradas
       const retirada = await prisma.retiradas.create({
         data: {
-          placa: upperPlaca,
+          placa: placaFinal,
           status: status || 'Retirado',
           data_retirada: parseIsoDate(data_retirada) || new Date(),
           unidade_id: inst?.unidade_id || null,
-          modelo_id: inst?.modelo_id || null
+          modelo_id: inst?.modelo_id || null,
+          motivo: motivo || null
         }
       });
 
@@ -341,7 +373,10 @@ export default function createGestaoSolarRouter(prisma) {
     } catch (error) {
       next(error);
     }
-  });
+  };
+
+  router.post('/instalacoes/:id/retirar', handleRetirarInstalacao);
+  router.post('/instalacoes/retirar', handleRetirarInstalacao);
 
   // Sync / Importação em Lote CSV
   router.post('/instalacoes/sync', async (req, res, next) => {
@@ -561,20 +596,336 @@ export default function createGestaoSolarRouter(prisma) {
   // 4. RETIRADAS / HISTÓRICO DE BAIXAS (retiradas)
   // =========================================================================
 
+  // Listar retiradas com paginação e filtros
   router.get('/retiradas', async (req, res, next) => {
     try {
-      const lista = await prisma.retiradas.findMany({
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+      const paginated = req.query.paginated === 'true' || req.query.paginated === true;
+      const { placa, unidade, uf, tipo, status } = req.query;
+
+      const where = {};
+
+      if (placa && placa.trim()) {
+        where.placa = { contains: placa.trim(), mode: 'insensitive' };
+      }
+
+      if (status && status.trim()) {
+        where.status = { equals: status.trim(), mode: 'insensitive' };
+      }
+
+      if (unidade && unidade.trim()) {
+        where.unidades_clientes = {
+          nome_unidade: { contains: unidade.trim(), mode: 'insensitive' }
+        };
+      }
+
+      if (uf && uf.trim()) {
+        where.unidades_clientes = {
+          ...(where.unidades_clientes || {}),
+          uf: { equals: uf.trim().toUpperCase() }
+        };
+      }
+
+      if (tipo && tipo.trim()) {
+        where.modelos_rastreadores = {
+          tipo_veiculo: { contains: tipo.trim(), mode: 'insensitive' }
+        };
+      }
+
+      const total = await prisma.retiradas.count({ where });
+
+      const queryOptions = {
+        where,
         include: {
-          unidades_clientes: true,
-          modelos_rastreadores: true
+          unidades_clientes: {
+            select: { id: true, nome_unidade: true, cod_cliente: true, razao_social: true, uf: true }
+          },
+          modelos_rastreadores: {
+            select: { id: true, nome_modelo: true, tipo_veiculo: true, valor_instalacao: true, valor_mensalidade: true }
+          }
         },
-        orderBy: { data_retirada: 'desc' }
-      });
-      res.status(200).json(lista);
+        orderBy: [
+          {
+            data_retirada: 'desc'
+          },
+          {
+            placa: 'asc'
+          }
+        ]
+      };
+
+      if (paginated) {
+        queryOptions.skip = (page - 1) * limit;
+        queryOptions.take = limit;
+      }
+
+      const retiradas = await prisma.retiradas.findMany(queryOptions);
+
+      if (paginated) {
+        return res.status(200).json({
+          data: retiradas,
+          pagination: {
+            total,
+            page,
+            limit,
+            total_pages: Math.ceil(total / limit) || 1
+          }
+        });
+      }
+
+      res.status(200).json(retiradas);
     } catch (error) {
       next(error);
     }
   });
+
+  // KPIs de retiradas (volume, taxa cobrada e distribuição por tipo e status)
+  router.get('/retiradas/kpis', async (req, res, next) => {
+    try {
+      const { placa, unidade, uf, tipo, status } = req.query;
+      const where = {};
+
+      if (placa && placa.trim()) {
+        where.placa = { contains: placa.trim(), mode: 'insensitive' };
+      }
+      if (status && status.trim()) {
+        where.status = { equals: status.trim(), mode: 'insensitive' };
+      }
+      if (unidade && unidade.trim()) {
+        where.unidades_clientes = { nome_unidade: { contains: unidade.trim(), mode: 'insensitive' } };
+      }
+      if (uf && uf.trim()) {
+        where.unidades_clientes = { ...(where.unidades_clientes || {}), uf: { equals: uf.trim().toUpperCase() } };
+      }
+      if (tipo && tipo.trim()) {
+        where.modelos_rastreadores = { tipo_veiculo: { contains: tipo.trim(), mode: 'insensitive' } };
+      }
+
+      const itens = await prisma.retiradas.findMany({
+        where,
+        select: {
+          status: true,
+          modelos_rastreadores: {
+            select: { tipo_veiculo: true, valor_instalacao: true }
+          }
+        }
+      });
+
+      let total = itens.length;
+      let totalReceita = 0;
+      let caminhao = 0;
+      let moto = 0;
+      let video = 0;
+      const statusCounts = {};
+
+      for (const item of itens) {
+        const st = item.status || 'Retirado';
+        statusCounts[st] = (statusCounts[st] || 0) + 1;
+
+        if (st.toLowerCase() === 'retirado') {
+          totalReceita += Number(item.modelos_rastreadores?.valor_instalacao || 0);
+        }
+
+        const t = (item.modelos_rastreadores?.tipo_veiculo || '').toUpperCase();
+        if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA')) {
+          caminhao++;
+        } else if (t.includes('MOTO')) {
+          moto++;
+        } else if (t.includes('VÍDEO') || t.includes('VIDEO') || t.includes('CÂMERA') || t.includes('CAMERA') || t.includes('DASHCAM')) {
+          video++;
+        }
+      }
+
+      // Buscar opções únicas existentes na tabela retiradas para popular os filtros
+      const todasOpcoesRetiradas = await prisma.retiradas.findMany({
+        select: {
+          status: true,
+          unidades_clientes: {
+            select: { nome_unidade: true, uf: true }
+          },
+          modelos_rastreadores: {
+            select: { tipo_veiculo: true }
+          }
+        }
+      });
+
+      // Se houver filtro de UF selecionado, refina a lista de unidades correspondentes
+      let unidadesBase = todasOpcoesRetiradas;
+      if (uf && uf.trim()) {
+        unidadesBase = unidadesBase.filter(r => (r.unidades_clientes?.uf || '').toUpperCase() === uf.trim().toUpperCase());
+      }
+
+      const unidadesDisponiveis = [...new Set(unidadesBase.map(r => r.unidades_clientes?.nome_unidade).filter(Boolean))].sort();
+      const ufsDisponiveis = [...new Set(todasOpcoesRetiradas.map(r => r.unidades_clientes?.uf).filter(Boolean))].sort();
+      const tiposDisponiveis = [...new Set(todasOpcoesRetiradas.map(r => r.modelos_rastreadores?.tipo_veiculo).filter(Boolean))].sort();
+      const statusDisponiveis = [...new Set(todasOpcoesRetiradas.map(r => r.status).filter(Boolean))].sort();
+
+      res.status(200).json({
+        total,
+        totalReceita,
+        tipos: { caminhao, moto, video },
+        status: statusCounts,
+        opcoesFiltros: {
+          unidades: unidadesDisponiveis,
+          ufs: ufsDisponiveis,
+          tipos: tiposDisponiveis,
+          status: statusDisponiveis
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Criar nova retirada manualmente
+  router.post('/retiradas', async (req, res, next) => {
+    try {
+      const { placa, status, data_retirada, unidade_id, modelo_id, motivo } = req.body;
+      if (!placa) {
+        return res.status(400).json({ erro: 'Placa é obrigatória.' });
+      }
+
+      const upperPlaca = placa.trim().toUpperCase();
+
+      const nova = await prisma.retiradas.create({
+        data: {
+          placa: upperPlaca,
+          status: status || 'Retirado',
+          data_retirada: parseIsoDate(data_retirada) || new Date(),
+          unidade_id: unidade_id ? parseInt(unidade_id, 10) : null,
+          modelo_id: modelo_id ? parseInt(modelo_id, 10) : null,
+          motivo: motivo || null
+        },
+        include: {
+          unidades_clientes: true,
+          modelos_rastreadores: true
+        }
+      });
+
+      res.status(201).json(nova);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Atualizar registro de retirada
+  router.put('/retiradas/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { placa, status, data_retirada, unidade_id, modelo_id, motivo } = req.body;
+
+      const atualizada = await prisma.retiradas.update({
+        where: { id },
+        data: {
+          placa: placa ? placa.trim().toUpperCase() : undefined,
+          status: status !== undefined ? status : undefined,
+          data_retirada: data_retirada !== undefined ? parseIsoDate(data_retirada) : undefined,
+          unidade_id: unidade_id !== undefined ? (unidade_id ? parseInt(unidade_id, 10) : null) : undefined,
+          modelo_id: modelo_id !== undefined ? (modelo_id ? parseInt(modelo_id, 10) : null) : undefined,
+          motivo: motivo !== undefined ? motivo : undefined
+        },
+        include: {
+          unidades_clientes: true,
+          modelos_rastreadores: true
+        }
+      });
+
+      res.status(200).json(atualizada);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Excluir registro de retirada
+  router.delete('/retiradas/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      await prisma.retiradas.delete({ where: { id } });
+      res.status(200).json({ mensagem: 'Registro de retirada excluído com sucesso.' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Importação e sincronização em lote CSV de retiradas
+  const handleRetiradasLote = async (req, res, next) => {
+    try {
+      const { linhas, payload, relatorio } = req.body;
+      const rows = Array.isArray(linhas) ? linhas : (Array.isArray(payload) ? payload : (Array.isArray(req.body) ? req.body : []));
+
+      if (rows.length === 0) {
+        return res.status(400).json({ erro: 'Nenhuma linha enviada para importação.' });
+      }
+
+      const unidades = await prisma.unidades_clientes.findMany();
+      const modelos = await prisma.modelos_rastreadores.findMany();
+
+      const mapUnidades = {};
+      unidades.forEach(u => { mapUnidades[u.nome_unidade.trim().toUpperCase()] = u.id; });
+
+      const mapModelos = {};
+      modelos.forEach(m => { mapModelos[m.nome_modelo.trim().toUpperCase()] = m.id; });
+
+      let inseridos = 0;
+      let atualizados = 0;
+
+      for (const row of rows) {
+        const p = (row.placa || row['Placa'] || '').trim().toUpperCase();
+        if (!p) continue;
+
+        const nomeU = (row.nome_unidade || row['Unidade'] || '').trim().toUpperCase();
+        const nomeM = (row.nome_modelo || row['Modelo do Rastreador'] || row['Modelo'] || row['Tipo'] || '').trim().toUpperCase();
+
+        const uid = mapUnidades[nomeU] || (row.unidade_id ? parseInt(row.unidade_id, 10) : null);
+        const mid = mapModelos[nomeM] || (row.modelo_id ? parseInt(row.modelo_id, 10) : null);
+        const dataRet = parseIsoDate(row.data_retirada || row['Data da Baixa'] || row['Data Baixa']);
+        const statusVal = row.status || row['Status'] || 'Retirado';
+
+        const existing = await prisma.retiradas.findFirst({ where: { placa: p } });
+        if (existing) {
+          await prisma.retiradas.update({
+            where: { id: existing.id },
+            data: {
+              status: statusVal,
+              data_retirada: dataRet || existing.data_retirada,
+              unidade_id: uid || existing.unidade_id,
+              modelo_id: mid || existing.modelo_id,
+              motivo: row.motivo || existing.motivo
+            }
+          });
+          atualizados++;
+        } else {
+          await prisma.retiradas.create({
+            data: {
+              placa: p,
+              status: statusVal,
+              data_retirada: dataRet || new Date(),
+              unidade_id: uid,
+              modelo_id: mid,
+              motivo: row.motivo || null
+            }
+          });
+          inseridos++;
+        }
+      }
+
+      res.status(200).json({
+        mensagem: 'Histórico de retiradas sincronizado com sucesso!',
+        relatorio: {
+          inseridos,
+          atualizados,
+          total: rows.length
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  router.post('/retiradas/lote', handleRetiradasLote);
+  router.post('/retiradas/sync', handleRetiradasLote);
+
 
   // =========================================================================
   // 5. TIMELINE MENSAL DE MOVIMENTAÇÕES
@@ -648,6 +999,227 @@ export default function createGestaoSolarRouter(prisma) {
           origem: t.unidades_clientes_log_movimentacoes_unidade_origem_idTounidades_clientes,
           destino: t.unidades_clientes_log_movimentacoes_unidade_destino_idTounidades_clientes
         }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // =========================================================================
+  // 5. TUTORIAIS & CONHECIMENTOS GERAIS
+  // =========================================================================
+
+  // Listar Equipamentos
+  router.get('/tutoriais/equipamentos', async (req, res, next) => {
+    try {
+      const { finalidade } = req.query;
+      const where = finalidade ? { finalidade: finalidade.trim() } : {};
+      const equipamentos = await prisma.equipamentos_padrao.findMany({
+        where,
+        orderBy: { created_at: 'asc' }
+      });
+      res.status(200).json({ data: equipamentos });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Criar / Atualizar Equipamento
+  router.post('/tutoriais/equipamentos', async (req, res, next) => {
+    try {
+      const { id, nome, codigo, status, finalidade } = req.body;
+      if (!nome || !codigo || !finalidade) {
+        return res.status(400).json({ status: 'error', message: 'Nome, código e finalidade são obrigatórios.' });
+      }
+      const equipId = id || `eq-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const equipamento = await prisma.equipamentos_padrao.upsert({
+        where: { id: equipId },
+        update: {
+          nome,
+          codigo,
+          status: status || 'Ativo',
+          finalidade
+        },
+        create: {
+          id: equipId,
+          nome,
+          codigo,
+          status: status || 'Ativo',
+          finalidade
+        }
+      });
+      res.status(200).json({ status: 'success', data: equipamento });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Excluir Equipamento
+  router.delete('/tutoriais/equipamentos/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      await prisma.equipamentos_padrao.delete({
+        where: { id }
+      });
+      res.status(200).json({ status: 'success', message: 'Equipamento excluído com sucesso.' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Carregar dados de Downloads (Scripts, Bibliotecas CAN e Perfis de Moto)
+  router.get('/tutoriais/downloads-data', async (req, res, next) => {
+    try {
+      const [scriptsRaw, bibliotecasRaw, perfisRaw, instalacoesCaminhao] = await Promise.all([
+        prisma.scripts_unidades.findMany(),
+        prisma.bibliotecas_can.findMany({ orderBy: { id: 'asc' } }),
+        prisma.perfis_motos.findMany({ orderBy: { nome: 'asc' } }),
+        prisma.instalacoes.findMany({
+          where: {
+            modelos_rastreadores: {
+              tipo_veiculo: { contains: 'CAMINH', mode: 'insensitive' }
+            }
+          },
+          select: {
+            unidades_clientes: {
+              select: { nome_unidade: true }
+            }
+          }
+        })
+      ]);
+
+      const scripts = {};
+      scriptsRaw.forEach(s => {
+        scripts[s.unidade] = { url: s.arquivo_url, nome: s.arquivo_nome, updated_at: s.updated_at };
+      });
+
+      const bibliotecas = {};
+      bibliotecasRaw.forEach(b => {
+        bibliotecas[b.id] = { url: b.arquivo_url, nome: b.arquivo_nome, updated_at: b.updated_at };
+      });
+
+      const perfis = {};
+      perfisRaw.forEach(p => {
+        perfis[p.nome] = { url: p.arquivo_url, nome: p.arquivo_nome, updated_at: p.updated_at };
+      });
+
+      const unidadesCaminhao = [
+        ...new Set(
+          instalacoesCaminhao
+            .map(i => i.unidades_clientes?.nome_unidade)
+            .filter(Boolean)
+        )
+      ].sort();
+
+      res.status(200).json({
+        scripts,
+        bibliotecas,
+        perfis,
+        unidadesCaminhao,
+        bibliotecasLista: bibliotecasRaw
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Upload de arquivos (Scripts de Unidade, Bibliotecas CAN ou Perfis de Moto)
+  router.post('/tutoriais/upload', uploadMemory.single('file'), async (req, res, next) => {
+    try {
+      const file = req.file;
+      const { type, identifier, nome } = req.body;
+
+      if (!file) {
+        return res.status(400).json({ status: 'error', message: 'Nenhum arquivo enviado.' });
+      }
+      if (!type || !identifier) {
+        return res.status(400).json({ status: 'error', message: 'Tipo e identificador são obrigatórios.' });
+      }
+
+      const fileExt = file.originalname.slice(file.originalname.lastIndexOf('.')) || '';
+      const cleanId = identifier.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+      const fileNameSafe = `${type}_${cleanId}_${Date.now()}${fileExt}`;
+
+      // Upload para o Supabase Storage bucket arquivos_tutoriais
+      const storageEndpoint = `${SUPABASE_STORAGE_URL}/storage/v1/object/arquivos_tutoriais/${encodeURIComponent(fileNameSafe)}`;
+      const uploadRes = await fetch(storageEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': file.mimetype || 'application/octet-stream',
+          'x-upsert': 'true'
+        },
+        body: file.buffer
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        console.error('Supabase storage upload error:', errText);
+        throw new Error(`Erro ao enviar arquivo para o storage: ${uploadRes.statusText}`);
+      }
+
+      const publicUrl = `${SUPABASE_STORAGE_URL}/storage/v1/object/public/arquivos_tutoriais/${encodeURIComponent(fileNameSafe)}`;
+
+      let record;
+      if (type === 'script') {
+        record = await prisma.scripts_unidades.upsert({
+          where: { unidade: identifier },
+          update: {
+            arquivo_nome: file.originalname,
+            arquivo_url: publicUrl,
+            updated_at: new Date()
+          },
+          create: {
+            unidade: identifier,
+            arquivo_nome: file.originalname,
+            arquivo_url: publicUrl,
+            updated_at: new Date()
+          }
+        });
+      } else if (type === 'lib') {
+        record = await prisma.bibliotecas_can.upsert({
+          where: { id: identifier },
+          update: {
+            nome: nome || identifier,
+            arquivo_nome: file.originalname,
+            arquivo_url: publicUrl,
+            updated_at: new Date()
+          },
+          create: {
+            id: identifier,
+            nome: nome || identifier,
+            arquivo_nome: file.originalname,
+            arquivo_url: publicUrl,
+            updated_at: new Date()
+          }
+        });
+      } else if (type === 'perfil') {
+        record = await prisma.perfis_motos.upsert({
+          where: { nome: identifier },
+          update: {
+            arquivo_nome: file.originalname,
+            arquivo_url: publicUrl,
+            updated_at: new Date()
+          },
+          create: {
+            nome: identifier,
+            arquivo_nome: file.originalname,
+            arquivo_url: publicUrl,
+            updated_at: new Date()
+          }
+        });
+      } else {
+        return res.status(400).json({ status: 'error', message: 'Tipo inválido (deve ser script, lib ou perfil).' });
+      }
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Arquivo enviado e atualizado com sucesso.',
+        data: {
+          url: publicUrl,
+          nome: file.originalname,
+          record
+        }
       });
     } catch (error) {
       next(error);

@@ -1,18 +1,17 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../services/supabase';
+import api from '../../../services/api';
 import { Layers, Plus, Edit2, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { Skeleton } from '../shared/Skeleton';
+import { Skeleton } from '../../shared/Skeleton';
 
 export default function EquipamentosTab({ activeTab, isAdmin, onEdit, onDelete }) {
   const { data: equipamentos = [], isLoading } = useQuery({
     queryKey: ['equipamentos_padrao'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('equipamentos_padrao').select('*');
-      if (error) throw error;
-      return data;
+      const response = await api.get('/tutoriais/equipamentos');
+      return response.data.data || [];
     },
-    staleTime: 1000 * 60 * 10, // 10 minutos
+    staleTime: 1000 * 60 * 5,
   });
 
   const equipamentosFiltrados = equipamentos.filter(eq => eq.finalidade === activeTab);
@@ -42,18 +41,18 @@ export default function EquipamentosTab({ activeTab, isAdmin, onEdit, onDelete }
         
         <div className="flex items-center justify-between gap-3 mb-8 relative z-10">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-slate-100 text-slate-600 rounded-xl border border-slate-200/50"><Layers size={22} /></div>
+            <div className="p-3 bg-teal-50 text-teal-600 rounded-xl border border-teal-100"><Layers size={22} /></div>
             <div>
-              <h3 className="text-xl font-extrabold text-slate-800 tracking-tight mb-1">Equipamentos</h3>
-              <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Padrão p/ {activeTab.toLowerCase()}</p>
+              <h3 className="text-xl font-extrabold text-slate-800 tracking-tight mb-1">Equipamentos Base</h3>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Padrão homologado p/ {activeTab.toLowerCase()}</p>
             </div>
           </div>
           {isAdmin && (
             <button 
               onClick={() => onEdit(null)}
-              className="flex-shrink-0 h-10 w-10 sm:w-auto sm:px-4 bg-teal-50 text-teal-600 rounded-xl hover:bg-teal-600 hover:text-white transition-all flex items-center justify-center shadow-sm font-bold text-sm gap-2 border border-teal-100 hover:border-teal-600 group/btn"
+              className="flex-shrink-0 h-10 w-10 sm:w-auto sm:px-4 bg-teal-50 text-teal-600 rounded-xl hover:bg-teal-600 hover:text-white transition-all flex items-center justify-center shadow-sm font-bold text-sm gap-2 border border-teal-100 hover:border-teal-600 group/btn cursor-pointer"
             >
-              <Plus size={18} className="group-hover/btn:rotate-90 transition-transform"/> <span className="hidden sm:inline">Adicionar</span>
+              <Plus size={18} className="group-hover/btn:rotate-90 transition-transform"/> <span className="hidden sm:inline">Adicionar Equipamento</span>
             </button>
           )}
         </div>
@@ -61,7 +60,15 @@ export default function EquipamentosTab({ activeTab, isAdmin, onEdit, onDelete }
         <div className="space-y-3 relative z-10">
           {equipamentosFiltrados.length === 0 ? (
             <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-               <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Nenhum equipamento cadastrado</p>
+               <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Nenhum equipamento cadastrado para esta categoria</p>
+               {isAdmin && (
+                 <button 
+                   onClick={() => onEdit(null)} 
+                   className="mt-3 text-xs font-bold text-teal-600 hover:underline cursor-pointer"
+                 >
+                   Clique aqui para cadastrar o primeiro
+                 </button>
+               )}
             </div>
           ) : (
             equipamentosFiltrados.map((eq) => (
@@ -81,14 +88,14 @@ export default function EquipamentosTab({ activeTab, isAdmin, onEdit, onDelete }
                     <div className="flex items-center gap-1 sm:opacity-0 group-hover/item:opacity-100 transition-opacity">
                       <button 
                         onClick={() => onEdit(eq)} 
-                        className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-colors border border-transparent hover:border-teal-100" 
+                        className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-colors border border-transparent hover:border-teal-100 cursor-pointer" 
                         title="Editar"
                       >
                         <Edit2 size={15} />
                       </button>
                       <button 
                         onClick={() => onDelete(eq.id)} 
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100" 
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100 cursor-pointer" 
                         title="Remover"
                       >
                         <Trash2 size={15} />

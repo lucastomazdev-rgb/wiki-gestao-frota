@@ -122,3 +122,35 @@ enum Role {
   USER
   ADMIN
 }
+
+model bibliotecas_can {
+  id           String    @id
+  nome         String
+  arquivo_nome String?
+  arquivo_url  String?
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model equipamentos_padrao {
+  id         String    @id
+  nome       String
+  codigo     String
+  status     String    @default("Ativo")
+  finalidade String
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model perfis_motos {
+  nome         String    @id
+  arquivo_nome String?
+  arquivo_url  String?
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model scripts_unidades {
+  unidade      String    @id
+  arquivo_nome String?
+  arquivo_url  String?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+}

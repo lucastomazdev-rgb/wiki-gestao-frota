@@ -201,12 +201,14 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
   const handleConfirmarRetirada = async (status, dataRetirada) => {
     try {
       await api.post(`/instalacoes/${veiculoParaRetirar.id}/retirar`, {
+        placa: veiculoParaRetirar.placa,
         status,
         data_retirada: dataRetirada
       });
       toast.success('Veículo retirado com sucesso!');
       setIsRetiradaModalOpen(false);
       carregarVeiculosSync();
+      queryClient.invalidateQueries({ queryKey: ['retiradas'] });
       if (avisarMudanca) avisarMudanca();
     } catch {
       toast.error('Erro ao registrar retirada.');

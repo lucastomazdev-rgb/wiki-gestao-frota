@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../services/supabase';
-import { BookOpen, Truck, Bike, Video } from 'lucide-react';
+import api from '../../services/api';
+import { BookOpen, Truck, Bike, Video, CheckCircle2, ShieldCheck, Layers } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../contexts/useAuth';
+import { useAuth } from '../../context/AuthContext';
 
 // Sub-components
 import EquipamentosTab from './tutoriais/EquipamentosTab';
@@ -34,9 +34,24 @@ export default function Tutoriais() {
     { id: 'VÍDEO', label: 'Vídeo', icon: Video },
   ];
 
-  // Admin status from centralized server-side check
-  const { isAdmin: isSysAdmin, hasPermission } = useAuth();
-  const isAdmin = isSysAdmin || hasPermission('tutoriais');
+  // Gestão Solar: qualquer usuário com acesso ao módulo tem permissão de upload e gerenciamento
+  const { user } = useAuth();
+  const isAdmin = Boolean(user?.role === 'ADMIN' || user?.can_access_gestao_solar);
+
+  // Sub-abas dinâmicas conforme a categoria
+  const subTabsForCurrent = activeTab === 'VÍDEO'
+    ? [{ key: 'Equipamentos', label: 'Equipamentos Base' }]
+    : activeTab === 'MOTO'
+      ? [
+          { key: 'Equipamentos', label: 'Equipamentos Base' },
+          { key: 'Downloads', label: 'Arquivos & Downloads' },
+          { key: 'Ferramentas', label: 'Conversão 1-Wire' },
+        ]
+      : [
+          { key: 'Equipamentos', label: 'Equipamentos Base' },
+          { key: 'Downloads', label: 'Arquivos & Downloads' },
+          { key: 'Ferramentas', label: 'Comandos de Configuração' },
+        ];
 
   // Handlers for Equipamentos
   const handleEditEquip = (equip) => {
@@ -47,105 +62,179 @@ export default function Tutoriais() {
 
   const handleSaveEquip = async (e) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      toast.error('Apenas usuários com permissão Gestão Solar podem cadastrar equipamentos.');
+      return;
+    }
     const toastId = toast.loading('Salvando equipamento...');
-    const payload = {
+    try {
+      const payload = {
         ...formData,
-        id: editingItem ? editingItem.id : Math.random().toString(36).substr(2, 9),
-    };
-    const { error } = await supabase.from('equipamentos_padrao').upsert(payload);
-    if (error) {
-        toast.error('Erro ao salvar.', { id: toastId });
-    } else {
-        toast.success('Equipamento salvo!', { id: toastId });
-        queryClient.invalidateQueries({ queryKey: ['equipamentos_padrao'] });
-        setIsModalOpen(false);
+        id: editingItem ? editingItem.id : undefined,
+      };
+      await api.post('/tutoriais/equipamentos', payload);
+      toast.success('Equipamento salvo com sucesso!', { id: toastId });
+      queryClient.invalidateQueries({ queryKey: ['equipamentos_padrao'] });
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Erro ao salvar equipamento.', { id: toastId });
     }
   };
 
   const handleDeleteEquip = async () => {
     const id = confirmDeleteEquip;
     setConfirmDeleteEquip(null);
-    const { error } = await supabase.from('equipamentos_padrao').delete().eq('id', id);
-    if (error) {
-        toast.error('Erro ao excluir.');
-    } else {
-        toast.success('Excluído!');
-        queryClient.invalidateQueries({ queryKey: ['equipamentos_padrao'] });
+    const toastId = toast.loading('Removendo equipamento...');
+    try {
+      await api.delete(`/tutoriais/equipamentos/${id}`);
+      toast.success('Equipamento excluído!', { id: toastId });
+      queryClient.invalidateQueries({ queryKey: ['equipamentos_padrao'] });
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Erro ao excluir equipamento.', { id: toastId });
     }
   };
 
-  // Download logic (Centralized logic for signing URLs)
+  // Download logic
   const handleDownloadRequest = (tipo, destino, arquivo) => {
-      if (!arquivo) return toast.error('Arquivo não disponível.');
-      setConfirmDownload({ tipo, destino, arquivo });
+    if (!arquivo || !arquivo.url) {
+      return toast.error('Arquivo ainda não disponível para download.');
+    }
+    setConfirmDownload({ tipo, destino, arquivo });
   };
 
-  const executeDownload = async () => {
+  const executeDownload = () => {
     if (confirmDownload?.arquivo?.url) {
-      try {
-        toast.loading('Preparando download...', { id: 'download-progress' });
-        const bucketName = 'arquivos_tutoriais';
-        const url = confirmDownload.arquivo.url;
-        const bucketMarker = `/object/public/${bucketName}/`;
-        const markerIndex = url.indexOf(bucketMarker);
-        if (markerIndex === -1) throw new Error('URL inválida');
-
-        const filePath = decodeURIComponent(url.substring(markerIndex + bucketMarker.length));
-        const nomeOriginal = confirmDownload.arquivo.nome || filePath.split('/').pop();
-
-        const { data, error } = await supabase.storage.from(bucketName).createSignedUrl(filePath, 60, { download: nomeOriginal });
-        if (error) throw error;
-        window.open(data.signedUrl, '_blank');
-        toast.success('Download iniciado!', { id: 'download-progress' });
-      } catch {
-        toast.error('Erro no download.', { id: 'download-progress' });
-      }
+      window.open(confirmDownload.arquivo.url, '_blank');
+      toast.success('Download iniciado!');
     }
     setConfirmDownload(null);
   };
 
   return (
-    <div className="space-y-8 w-full max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+    <div className="space-y-6 w-full max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
       {/* HEADER PRINCIPAL */}
-      <div className="bg-white rounded-3xl p-6 shadow-[0_2px_20px_rgb(0,0,0,0.03)] border border-slate-200/60 flex flex-col xl:flex-row justify-between items-center gap-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-full bg-gradient-to-r from-transparent to-teal-500/5 pointer-events-none"></div>
-        <div className="flex items-center gap-5 z-10 w-full xl:w-auto">
-          <div className="p-4 bg-teal-50 border border-teal-100 rounded-2xl text-teal-600 shadow-inner"><BookOpen size={28} /></div>
+      <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-[0_2px_20px_rgb(0,0,0,0.03)] border border-slate-200/80 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-80 h-full bg-gradient-to-r from-transparent to-teal-500/5 pointer-events-none"></div>
+        <div className="flex items-center gap-4 z-10 w-full md:w-auto">
+          <div className="p-3.5 bg-teal-50 border border-teal-100 rounded-2xl text-teal-600 shadow-inner shrink-0">
+            <BookOpen size={24} />
+          </div>
           <div>
-            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight leading-tight">Base de Conhecimento</h2>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Biblioteca de Equipamentos e Scripts</p>
+            <div className="flex items-center gap-2 mb-0.5">
+              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight leading-tight">
+                Tutoriais & Conhecimentos Gerais
+              </h2>
+              {isAdmin && (
+                <span className="hidden lg:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200">
+                  <ShieldCheck size={12} /> Gestão Solar
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+              Equipamentos Homologados, Scripts e Comandos Técnicos
+            </p>
           </div>
         </div>
-        <div className="flex w-full xl:w-auto bg-slate-100/80 p-1.5 rounded-2xl relative z-10 border border-slate-200/50 shadow-inner overflow-x-auto custom-scrollbar">
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 min-w-[160px] ${activeTab === tab.id ? 'bg-white text-teal-700 shadow-sm border border-slate-200/60 ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}>
-              <tab.icon size={18} className={activeTab === tab.id ? 'text-teal-600' : ''} /> {tab.label}
-            </button>
-          ))}
+        
+        {/* SELETOR DE ABAS PRINCIPAIS (Compacto e sem scroll interno feio) */}
+        <div className="inline-flex bg-slate-100/90 p-1 rounded-2xl border border-slate-200/70 shadow-inner shrink-0 z-10">
+          {tabs.map(tab => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <button 
+                key={tab.id} 
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setActiveSubTab('Equipamentos');
+                }} 
+                className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 cursor-pointer ${
+                  isSelected 
+                    ? 'bg-white text-teal-700 shadow-sm border border-slate-200/60 font-extrabold' 
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50'
+                }`}
+              >
+                <tab.icon size={16} className={isSelected ? 'text-teal-600' : 'text-slate-400'} /> 
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* SUB-HEADER */}
-      <div className="flex bg-white/60 p-1.5 rounded-2xl border border-slate-200/60 shadow-sm overflow-x-auto custom-scrollbar w-full xl:w-fit mb-2">
-        {['Equipamentos', 'Downloads', 'Ferramentas'].map(sub => (
-          <button key={sub} onClick={() => setActiveSubTab(sub)} className={`px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex-1 md:flex-none whitespace-nowrap ${activeSubTab === sub ? 'bg-teal-600 text-white shadow-md' : 'text-slate-500 hover:text-teal-600 hover:bg-teal-50'}`}>
-            {sub === 'Downloads' ? 'Arquivos & Downloads' : sub === 'Ferramentas' ? (activeTab === 'CAMINHÃO' ? 'Comandos para configuração' : activeTab === 'MOTO' ? 'Conversão 1-Wire' : 'Ferramentas Técnicas') : 'Equipamentos Base'}
-          </button>
-        ))}
+      {/* SUB-HEADER (Equipamentos Base | Downloads | Ferramentas Técnicas) */}
+      <div className="flex bg-white/80 backdrop-blur-xs p-1 rounded-2xl border border-slate-200/70 shadow-xs w-full sm:w-fit mb-1">
+        {subTabsForCurrent.map(sub => {
+          const isSelected = activeSubTab === sub.key;
+          return (
+            <button 
+              key={sub.key} 
+              onClick={() => setActiveSubTab(sub.key)} 
+              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex-1 sm:flex-initial whitespace-nowrap cursor-pointer ${
+                isSelected 
+                  ? 'bg-teal-600 text-white shadow-sm' 
+                  : 'text-slate-500 hover:text-teal-700 hover:bg-teal-50/70'
+              }`}
+            >
+              {sub.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* CONTENT AREA */}
+      {/* ÁREA DE CONTEÚDO */}
       <div className="flex flex-col gap-6 w-full h-full min-h-[500px]">
-          {activeSubTab === 'Equipamentos' && <EquipamentosTab activeTab={activeTab} isAdmin={isAdmin} onEdit={handleEditEquip} onDelete={setConfirmDeleteEquip} />}
-          {activeSubTab === 'Downloads' && <DownloadsTab activeTab={activeTab} isAdmin={isAdmin} unidadeSelecionada={unidadeSelecionada} setUnidadeSelecionada={setUnidadeSelecionada} perfilMotoSelecionado={perfilMotoSelecionado} setPerfilMotoSelecionado={setPerfilMotoSelecionado} onDownload={handleDownloadRequest} />}
-          {activeSubTab === 'Ferramentas' && <FerramentasTab activeTab={activeTab} />}
+        {activeSubTab === 'Equipamentos' && (
+          <EquipamentosTab 
+            activeTab={activeTab} 
+            isAdmin={isAdmin} 
+            onEdit={handleEditEquip} 
+            onDelete={setConfirmDeleteEquip} 
+          />
+        )}
+
+        {activeSubTab === 'Downloads' && activeTab !== 'VÍDEO' && (
+          <DownloadsTab 
+            activeTab={activeTab} 
+            isAdmin={isAdmin} 
+            unidadeSelecionada={unidadeSelecionada} 
+            setUnidadeSelecionada={setUnidadeSelecionada} 
+            perfilMotoSelecionado={perfilMotoSelecionado} 
+            setPerfilMotoSelecionado={setPerfilMotoSelecionado} 
+            onDownload={handleDownloadRequest} 
+          />
+        )}
+
+        {activeSubTab === 'Ferramentas' && activeTab !== 'VÍDEO' && (
+          <FerramentasTab activeTab={activeTab} />
+        )}
       </div>
 
-      {/* SHARED MODALS */}
-      <ModalEquipamento isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} editingItem={editingItem} formData={formData} setFormData={setFormData} onSave={handleSaveEquip} isAdmin={isAdmin} />
-      <ModalDownload confirmDownload={confirmDownload} onClose={() => setConfirmDownload(null)} onConfirm={executeDownload} />
-      <ConfirmModal isOpen={!!confirmDeleteEquip} onCancel={() => setConfirmDeleteEquip(null)} onConfirm={handleDeleteEquip} title="Excluir Equipamento" message="Deseja remover permanentemente este item da base? Esta ação não pode ser desfeita." />
+      {/* MODAIS COMPARTILHADOS */}
+      <ModalEquipamento 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        editingItem={editingItem} 
+        formData={formData} 
+        setFormData={setFormData} 
+        onSave={handleSaveEquip} 
+        isAdmin={isAdmin} 
+      />
+
+      <ModalDownload 
+        confirmDownload={confirmDownload} 
+        onClose={() => setConfirmDownload(null)} 
+        onConfirm={executeDownload} 
+      />
+
+      <ConfirmModal 
+        isOpen={!!confirmDeleteEquip} 
+        onCancel={() => setConfirmDeleteEquip(null)} 
+        onConfirm={handleDeleteEquip} 
+        title="Excluir Equipamento" 
+        message="Deseja remover permanentemente este item da base? Esta ação não pode ser desfeita." 
+      />
     </div>
   );
 }

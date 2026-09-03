@@ -13,6 +13,8 @@ import ArticleDetail from './pages/ArticleDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import SidebarGestaoSolar from './components/SidebarGestaoSolar';
 import TabelaVeiculos from './components/TabelaVeiculos';
+import Retiradas from './components/gestao-solar/Retiradas';
+import Tutoriais from './components/gestao-solar/Tutoriais';
 import { 
   Download, 
   FileText, 
@@ -172,7 +174,7 @@ function AppContent() {
                 </span>
                 <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-400" />
                 <span className="font-extrabold text-slate-900 truncate">
-                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : currentSolarTab}
+                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : (currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : (currentSolarTab === 'tutoriais' ? 'Tutoriais & Conhecimentos Gerais' : currentSolarTab))}
                 </span>
               </nav>
             </div>
@@ -197,6 +199,12 @@ function AppContent() {
           <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
             {currentSolarTab === 'veiculos' && (
               <TabelaVeiculos />
+            )}
+            {currentSolarTab === 'retiradas' && (
+              <Retiradas />
+            )}
+            {currentSolarTab === 'tutoriais' && (
+              <Tutoriais />
             )}
           </main>
         </div>

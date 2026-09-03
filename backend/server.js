@@ -341,6 +341,10 @@ app.post('/api/auth/logout', (req, res) => {
 // Get current session
 app.get('/api/auth/me', protect, async (req, res, next) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ status: 'error', message: 'Sessão inválida. Faça login novamente.' });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {

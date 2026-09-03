@@ -70,7 +70,14 @@ export default function TabelaVeiculosListView({
             <tr className="bg-slate-50/80 text-slate-500 text-[10px] uppercase tracking-[0.15em] border-b border-slate-200">
               <th className="p-3 pl-5 font-black w-[15%]">Placa</th>
               <th className="p-3 font-black w-[15%]">Módulo</th>
-              <th className="p-3 font-black w-[30%]">Unidade</th>
+              <th className="p-3 font-black w-[30%]">
+                <span className="inline-flex items-center gap-1.5">
+                  <span>Unidade</span>
+                  <span className="text-[9px] font-black bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200/60 tracking-tight">
+                    A-Z
+                  </span>
+                </span>
+              </th>
               <th className="p-3 font-black w-[15%]">Tipo</th>
               <th className="p-3 font-black w-[15%] text-right pr-5">Mensalidade</th>
               <th className="p-3 font-black w-[10%] text-center">Ações</th>
