@@ -79,7 +79,19 @@ function AppContent() {
   }, [canAccessSolar, platformMode]);
 
   // Technical PDF manuals data for downloads tab
-  const technicalFiles = [];
+  const technicalFiles = [
+    {
+      id: 'guia-operacional-ccr',
+      title: 'Guia Operacional de Acesso ao CCR',
+      category: 'Procedimentos Operacionais',
+      type: 'MANUAL OPERACIONAL',
+      description: 'Manual de procedimentos, fluxos operacionais e diretrizes para credenciamento e solicitação de acesso ao CCR.',
+      url: '/documents/GUIA%20OPERACIONAL%20DE%20ACESSO%20AO%20CCR.pdf',
+      downloadFilename: 'GUIA OPERACIONAL DE ACESSO AO CCR.pdf',
+      size: '9.8 MB',
+      updatedAt: 'Oficial'
+    }
+  ];
 
   if (loading) {
     return (
@@ -278,28 +290,68 @@ function AppContent() {
               {technicalFiles.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {technicalFiles.map((file, idx) => (
-                    <motion.a
-                      key={idx}
+                    <motion.div
+                      key={file.id || idx}
                       whileHover={{ scale: 1.01 }}
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-4 bg-slate-900/60 border border-white/10 rounded-2xl flex flex-col justify-between group transition-all h-full hover:border-amber-500/40"
+                      className="p-5 bg-slate-900/70 backdrop-blur-sm border border-white/10 rounded-2xl flex flex-col justify-between group transition-all h-full hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5"
                     >
                       <div>
-                        <span className="text-[11px] font-sans bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2.5 py-0.5 rounded-full font-medium">
-                          {file.type}
-                        </span>
-                        <h3 className="text-sm font-semibold text-white mt-3 group-hover:text-amber-400 transition-colors leading-snug">
-                          {file.title}
-                        </h3>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-sans tracking-wide uppercase bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2.5 py-0.5 rounded-full font-bold">
+                              {file.type}
+                            </span>
+                            {file.size && (
+                              <span className="text-[10px] font-sans bg-slate-800 text-slate-400 px-2 py-0.5 rounded-md border border-white/5">
+                                {file.size}
+                              </span>
+                            )}
+                          </div>
+                          {file.updatedAt && (
+                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">
+                              {file.updatedAt}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-start gap-3 mt-1">
+                          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                            <FileText size={22} />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-base font-bold text-white group-hover:text-amber-400 transition-colors leading-snug">
+                              {file.title}
+                            </h3>
+                            {file.description && (
+                              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed font-sans">
+                                {file.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      
-                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs font-sans text-slate-400 group-hover:text-amber-400">
-                        <span>Download PDF</span>
-                        <Download size={16} className="shrink-0 transition-transform group-hover:translate-y-0.5" />
+
+                      <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between gap-3">
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
+                        >
+                          <ExternalLink size={14} />
+                          <span>Visualizar</span>
+                        </a>
+
+                        <a
+                          href={file.url}
+                          download={file.downloadFilename}
+                          className="flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 transition-all cursor-pointer"
+                        >
+                          <Download size={14} strokeWidth={2.5} />
+                          <span>Baixar PDF</span>
+                        </a>
                       </div>
-                    </motion.a>
+                    </motion.div>
                   ))}
                 </div>
               ) : (
