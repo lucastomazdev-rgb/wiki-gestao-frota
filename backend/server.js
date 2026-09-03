@@ -503,8 +503,6 @@ app.put('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) =
 });
 
 
-// Montar rotas da Gestão Solar
-app.use('/api', createGestaoSolarRouter(prisma));
 
 // Delete a user
 app.delete('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) => {
@@ -739,6 +737,8 @@ app.delete('/api/articles/:id', protect, restrictTo('ADMIN'), async (req, res, n
   }
 });
 
+// --- ROTAS DO MÓDULO GESTÃO SOLAR ---
+app.use('/api', createGestaoSolarRouter(prisma));
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {

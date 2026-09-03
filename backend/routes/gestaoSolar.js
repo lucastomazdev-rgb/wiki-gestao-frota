@@ -5,8 +5,9 @@ import { protect, restrictToGestaoSolar } from '../middleware/auth.js';
 export default function createGestaoSolarRouter(prisma) {
   const router = express.Router();
 
-  // All routes inside this router require authentication and Gestão Solar permission
-  router.use(protect, restrictToGestaoSolar);
+  // Rotas exclusivas do módulo Gestão Solar com autenticação e validação de permissão
+  const gestaoSolarPaths = ['/instalacoes', '/unidades', '/modelos', '/retiradas', '/timeline'];
+  router.use(gestaoSolarPaths, protect, restrictToGestaoSolar);
 
   // Helper date formatter
   const parseIsoDate = (val) => {
