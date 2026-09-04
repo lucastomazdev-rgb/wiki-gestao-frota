@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api, { setStoredToken, clearStoredToken } from '../services/api';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -16,7 +16,6 @@ export const AuthProvider = ({ children }) => {
       response => response,
       error => {
         if (error.response && error.response.status === 401) {
-          clearStoredToken();
           setUser(null);
         }
         return Promise.reject(error);
@@ -34,7 +33,6 @@ export const AuthProvider = ({ children }) => {
           setUser(response.data.data.user);
         }
       } catch (err) {
-        clearStoredToken();
         setUser(null);
       } finally {
         setLoading(false);
@@ -49,39 +47,37 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data.status === 'success') {
-        const { user: userData, token } = response.data.data;
-        if (token) {
-          setStoredToken(token);
-        }
+        const { user: userData } = response.data.data;
         setUser(userData);
         return true;
       }
     } catch (err) {
       const message = err.response?.data?.message || 'E-mail ou senha incorretos.';
       setError(message);
-      throw new Error(message);
+      throw new Error(message, { cause: err });
     } finally {
       setLoading(false);
     }
   };
 
-  const register = async (email, password, name) => {
+  const register = async (email, password, name, setupToken = '') => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.post('/auth/register', { email, password, name });
+      const response = await api.post(
+        '/auth/register',
+        { email, password, name },
+        setupToken ? { headers: { 'X-Setup-Token': setupToken } } : undefined
+      );
       if (response.data.status === 'success') {
-        const { user: userData, token } = response.data.data;
-        if (token) {
-          setStoredToken(token);
-        }
+        const { user: userData } = response.data.data;
         setUser(userData);
         return true;
       }
     } catch (err) {
       const message = err.response?.data?.message || 'Erro ao registrar usuário.';
       setError(message);
-      throw new Error(message);
+      throw new Error(message, { cause: err });
     } finally {
       setLoading(false);
     }
@@ -94,7 +90,6 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('Logout failed:', err);
     } finally {
-      clearStoredToken();
       setUser(null);
       setLoading(false);
     }

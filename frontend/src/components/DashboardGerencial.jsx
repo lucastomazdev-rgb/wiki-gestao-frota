@@ -302,6 +302,8 @@ export default function DashboardGerencial() {
           <div className="relative w-full sm:w-72">
             <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-teal-400" size={18} />
             <select 
+              id="filtro-unidade-dashboard"
+              aria-label="Filtrar por unidade"
               value={filtroUnidade} 
               onChange={e => setFiltroUnidade(e.target.value)}
               className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/30 focus:bg-white transition-all cursor-pointer appearance-none shadow-inner"

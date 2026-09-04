@@ -228,7 +228,6 @@ export default function Agendamentos() {
     return () => {
       controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paginaAtual, dataInicio, dataFim, filtroUnidade, filtroStatus, filtroPlacaDebounced]);
 
   useEffect(() => {

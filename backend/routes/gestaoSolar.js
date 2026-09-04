@@ -1,18 +1,25 @@
 import express from 'express';
 import { z } from 'zod';
 import multer from 'multer';
-import { protect, restrictToGestaoSolar } from '../middleware/auth.js';
+import { restrictToGestaoSolar } from '../middleware/auth.js';
+import {
+  createPrivateDownloadUrl,
+  deletePrivateFile,
+  extractObjectPath,
+  uploadPrivateFile,
+  validateTutorialFile
+} from '../services/storage.js';
 
 const uploadMemory = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 }
 });
 
-const SUPABASE_STORAGE_URL = process.env.SUPABASE_URL || 'https://fhqhuwvfehvrhfuogyie.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocWh1d3ZmZWh2cmhmdW9neWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDkyMzcsImV4cCI6MjA5OTg4NTIzN30.YMykOW34L88IlnkHXYBAdaEyszZ0ebAklRRnftVjhio';
+const TUTORIAL_BUCKET = 'arquivos_tutoriais';
 
-export default function createGestaoSolarRouter(prisma) {
+export default function createGestaoSolarRouter(prisma, protect) {
   const router = express.Router();
+  const normalizePlate = (value) => String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
   // Rotas exclusivas do módulo Gestão Solar com autenticação e validação de permissão
   const gestaoSolarPaths = ['/instalacoes', '/unidades', '/modelos', '/retiradas', '/timeline', '/tutoriais'];
@@ -66,8 +73,6 @@ export default function createGestaoSolarRouter(prisma) {
         };
       }
 
-      const total = await prisma.instalacoes.count({ where });
-
       const queryOptions = {
         where,
         include: {
@@ -95,7 +100,10 @@ export default function createGestaoSolarRouter(prisma) {
         queryOptions.take = limit;
       }
 
-      const instalacoes = await prisma.instalacoes.findMany(queryOptions);
+      const [instalacoes, total] = await Promise.all([
+        prisma.instalacoes.findMany(queryOptions),
+        paginated ? prisma.instalacoes.count({ where }) : Promise.resolve(null)
+      ]);
 
       if (paginated) {
         return res.status(200).json({
@@ -137,33 +145,37 @@ export default function createGestaoSolarRouter(prisma) {
         where.modelos_rastreadores = { tipo_veiculo: { contains: tipo.trim(), mode: 'insensitive' } };
       }
 
-      const instalacoes = await prisma.instalacoes.findMany({
+      const grouped = await prisma.instalacoes.groupBy({
+        by: ['modelo_id'],
         where,
-        select: {
-          modelo_id: true,
-          modelos_rastreadores: {
-            select: { tipo_veiculo: true }
-          }
-        }
+        _count: { _all: true }
       });
+
+      const modelIds = grouped.map(item => item.modelo_id).filter(id => id !== null);
+      const models = await prisma.modelos_rastreadores.findMany({
+        where: { id: { in: modelIds } },
+        select: { id: true, tipo_veiculo: true }
+      });
+      const typeByModel = new Map(models.map(model => [model.id, model.tipo_veiculo || '']));
 
       let caminhao = 0;
       let moto = 0;
       let video = 0;
 
-      for (const item of instalacoes) {
-        const t = (item.modelos_rastreadores?.tipo_veiculo || '').toUpperCase();
+      for (const item of grouped) {
+        const t = (typeByModel.get(item.modelo_id) || '').toUpperCase();
+        const count = item._count._all;
         if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA')) {
-          caminhao++;
+          caminhao += count;
         } else if (t.includes('MOTO')) {
-          moto++;
+          moto += count;
         } else if (t.includes('VÍDEO') || t.includes('VIDEO') || t.includes('CÂMER') || t.includes('CAMER') || t.includes('DASH')) {
-          video++;
+          video += count;
         }
       }
 
       res.status(200).json({
-        total: instalacoes.length,
+        total: grouped.reduce((sum, item) => sum + item._count._all, 0),
         tipos: {
           caminhao,
           moto,
@@ -188,7 +200,8 @@ export default function createGestaoSolarRouter(prisma) {
         modelo_id
       } = req.body;
 
-      if (!placa || !placa.trim()) {
+      const normalizedPlate = normalizePlate(placa);
+      if (normalizedPlate.length < 5 || normalizedPlate.length > 8) {
         return res.status(400).json({ status: 'error', erro: 'Placa é obrigatória.' });
       }
 
@@ -197,7 +210,7 @@ export default function createGestaoSolarRouter(prisma) {
           descricao_veiculo: descricao_veiculo?.trim() || null,
           modulo: modulo?.trim() || null,
           operacao: operacao?.trim() || null,
-          placa: placa.trim().toUpperCase(),
+          placa: normalizedPlate,
           data_instalacao: parseIsoDate(data_instalacao),
           unidade_id: unidade_id ? parseInt(unidade_id, 10) : null,
           modelo_id: modelo_id ? parseInt(modelo_id, 10) : null
@@ -234,35 +247,41 @@ export default function createGestaoSolarRouter(prisma) {
       }
 
       const novoUnidadeId = unidade_id ? parseInt(unidade_id, 10) : null;
-
-      // Se mudou de unidade, registra movimentação
-      if (atual.unidade_id && novoUnidadeId && atual.unidade_id !== novoUnidadeId) {
-        await prisma.log_movimentacoes.create({
-          data: {
-            placa: placa?.trim().toUpperCase() || atual.placa,
-            tipo: 'TRANSFERENCIA',
-            unidade_origem_id: atual.unidade_id,
-            unidade_destino_id: novoUnidadeId,
-            usuario_id: req.user?.id || null
-          }
-        }).catch(err => console.error('Erro ao registrar log de movimentação:', err));
+      const normalizedPlate = placa !== undefined ? normalizePlate(placa) : atual.placa;
+      if (normalizedPlate.length < 5 || normalizedPlate.length > 8) {
+        return res.status(400).json({ status: 'error', erro: 'Placa inválida.' });
       }
 
-      const atualizada = await prisma.instalacoes.update({
-        where: { id },
-        data: {
-          descricao_veiculo: descricao_veiculo !== undefined ? descricao_veiculo?.trim() || null : atual.descricao_veiculo,
-          modulo: modulo !== undefined ? modulo?.trim() || null : atual.modulo,
-          operacao: operacao !== undefined ? operacao?.trim() || null : atual.operacao,
-          placa: placa ? placa.trim().toUpperCase() : atual.placa,
-          data_instalacao: data_instalacao !== undefined ? parseIsoDate(data_instalacao) : atual.data_instalacao,
-          unidade_id: unidade_id !== undefined ? novoUnidadeId : atual.unidade_id,
-          modelo_id: modelo_id !== undefined ? (modelo_id ? parseInt(modelo_id, 10) : null) : atual.modelo_id
-        },
-        include: {
-          unidades_clientes: true,
-          modelos_rastreadores: true
+      const atualizada = await prisma.$transaction(async (tx) => {
+        const updated = await tx.instalacoes.update({
+          where: { id },
+          data: {
+            descricao_veiculo: descricao_veiculo !== undefined ? descricao_veiculo?.trim() || null : atual.descricao_veiculo,
+            modulo: modulo !== undefined ? modulo?.trim() || null : atual.modulo,
+            operacao: operacao !== undefined ? operacao?.trim() || null : atual.operacao,
+            placa: normalizedPlate,
+            data_instalacao: data_instalacao !== undefined ? parseIsoDate(data_instalacao) : atual.data_instalacao,
+            unidade_id: unidade_id !== undefined ? novoUnidadeId : atual.unidade_id,
+            modelo_id: modelo_id !== undefined ? (modelo_id ? parseInt(modelo_id, 10) : null) : atual.modelo_id
+          },
+          include: {
+            unidades_clientes: true,
+            modelos_rastreadores: true
+          }
+        });
+
+        if (atual.unidade_id && novoUnidadeId && atual.unidade_id !== novoUnidadeId) {
+          await tx.log_movimentacoes.create({
+            data: {
+              placa: normalizedPlate,
+              tipo: 'TRANSFERENCIA',
+              unidade_origem_id: atual.unidade_id,
+              unidade_destino_id: novoUnidadeId,
+              usuario_id: req.user?.id || null
+            }
+          });
         }
+        return updated;
       });
 
       res.status(200).json(atualizada);
@@ -292,31 +311,42 @@ export default function createGestaoSolarRouter(prisma) {
 
       const destId = parseInt(unidade_destino_id, 10);
       const origId = unidade_origem_id ? parseInt(unidade_origem_id, 10) : null;
+      if (!Number.isInteger(destId) || (origId !== null && !Number.isInteger(origId))) {
+        return res.status(400).json({ erro: 'Unidade de origem ou destino inválida.' });
+      }
 
-      const upperPlacas = placas.map(p => String(p).trim().toUpperCase());
+      const upperPlacas = [...new Set(placas.map(normalizePlate).filter(Boolean))];
+      const transferidos = await prisma.$transaction(async (tx) => {
+        const existentes = await tx.instalacoes.findMany({
+          where: {
+            placa: { in: upperPlacas },
+            ...(origId !== null ? { unidade_id: origId } : {}),
+            NOT: { unidade_id: destId }
+          },
+          select: { id: true, placa: true, unidade_id: true }
+        });
+        if (existentes.length === 0) return 0;
 
-      // Atualiza as instalações
-      await prisma.instalacoes.updateMany({
-        where: { placa: { in: upperPlacas } },
-        data: { unidade_id: destId }
-      });
-
-      // Cria os registros de movimentação
-      for (const p of upperPlacas) {
-        await prisma.log_movimentacoes.create({
-          data: {
-            placa: p,
+        await tx.instalacoes.updateMany({
+          where: { id: { in: existentes.map(item => item.id) } },
+          data: { unidade_id: destId }
+        });
+        await tx.log_movimentacoes.createMany({
+          data: existentes.map(item => ({
+            placa: item.placa,
             tipo: 'TRANSFERENCIA',
-            unidade_origem_id: origId,
+            unidade_origem_id: item.unidade_id,
             unidade_destino_id: destId,
             usuario_id: req.user?.id || null
-          }
-        }).catch(() => {});
-      }
+          }))
+        });
+        return existentes.length;
+      });
 
       res.status(200).json({
         mensagem: 'Transferência concluída com sucesso!',
-        transferidos: upperPlacas.length
+        transferidos,
+        ignorados: upperPlacas.length - transferidos
       });
     } catch (error) {
       next(error);
@@ -337,7 +367,7 @@ export default function createGestaoSolarRouter(prisma) {
       }
 
       if (!inst && placa) {
-        const upperPlaca = placa.trim().toUpperCase();
+        const upperPlaca = normalizePlate(placa);
         inst = await prisma.instalacoes.findFirst({
           where: { placa: upperPlaca }
         });
@@ -347,24 +377,22 @@ export default function createGestaoSolarRouter(prisma) {
         return res.status(400).json({ erro: 'Identificador do veículo ou placa é obrigatório.' });
       }
 
-      const placaFinal = inst ? inst.placa : (placa ? placa.trim().toUpperCase() : '');
+      const placaFinal = inst ? inst.placa : normalizePlate(placa);
 
-      // Cria registro na tabela retiradas
-      const retirada = await prisma.retiradas.create({
-        data: {
-          placa: placaFinal,
-          status: status || 'Retirado',
-          data_retirada: parseIsoDate(data_retirada) || new Date(),
-          unidade_id: inst?.unidade_id || null,
-          modelo_id: inst?.modelo_id || null,
-          motivo: motivo || null
-        }
+      const retirada = await prisma.$transaction(async (tx) => {
+        const created = await tx.retiradas.create({
+          data: {
+            placa: placaFinal,
+            status: status || 'Retirado',
+            data_retirada: parseIsoDate(data_retirada) || new Date(),
+            unidade_id: inst?.unidade_id || null,
+            modelo_id: inst?.modelo_id || null,
+            motivo: motivo || null
+          }
+        });
+        if (inst) await tx.instalacoes.delete({ where: { id: inst.id } });
+        return created;
       });
-
-      // Remove da frota ativa instalacoes
-      if (inst) {
-        await prisma.instalacoes.delete({ where: { id: inst.id } });
-      }
 
       res.status(200).json({
         mensagem: 'Veículo retirado da frota ativa e registrado no histórico.',
@@ -387,6 +415,9 @@ export default function createGestaoSolarRouter(prisma) {
       if (rows.length === 0) {
         return res.status(400).json({ erro: 'Nenhuma linha enviada para importação.' });
       }
+      if (rows.length > 2000) {
+        return res.status(413).json({ erro: 'Limite de 2.000 linhas por importação excedido.' });
+      }
 
       // Carrega unidades e modelos para busca de ids
       const unidades = await prisma.unidades_clientes.findMany();
@@ -398,11 +429,9 @@ export default function createGestaoSolarRouter(prisma) {
       const mapModelos = {};
       modelos.forEach(m => { mapModelos[m.nome_modelo.trim().toUpperCase()] = m.id; });
 
-      let inseridos = 0;
-      let atualizados = 0;
-
+      const normalizedByPlate = new Map();
       for (const row of rows) {
-        const p = (row.placa || row['Placa'] || '').trim().toUpperCase();
+        const p = normalizePlate(row.placa || row['Placa']);
         if (!p) continue;
 
         const nomeU = (row.nome_unidade || row['Unidade'] || '').trim().toUpperCase();
@@ -413,42 +442,52 @@ export default function createGestaoSolarRouter(prisma) {
 
         const dataInst = parseIsoDate(row.data_instalacao || row['Data Instalação']);
 
-        const existing = await prisma.instalacoes.findFirst({ where: { placa: p } });
-        if (existing) {
-          await prisma.instalacoes.update({
-            where: { id: existing.id },
-            data: {
-              descricao_veiculo: row.descricao_veiculo || existing.descricao_veiculo,
-              modulo: row.modulo || existing.modulo,
-              operacao: row.operacao || existing.operacao,
-              data_instalacao: dataInst || existing.data_instalacao,
-              unidade_id: uid || existing.unidade_id,
-              modelo_id: mid || existing.modelo_id
-            }
-          });
-          atualizados++;
-        } else {
-          await prisma.instalacoes.create({
-            data: {
-              placa: p,
-              descricao_veiculo: row.descricao_veiculo || null,
-              modulo: row.modulo || null,
-              operacao: row.operacao || null,
-              data_instalacao: dataInst || new Date(),
-              unidade_id: uid,
-              modelo_id: mid
-            }
-          });
-          inseridos++;
-        }
+        normalizedByPlate.set(p, { row, p, uid, mid, dataInst });
       }
+
+      const normalizedRows = [...normalizedByPlate.values()];
+      const existingRows = await prisma.instalacoes.findMany({
+        where: { placa: { in: normalizedRows.map(item => item.p) } },
+        select: {
+          id: true,
+          placa: true,
+          descricao_veiculo: true,
+          modulo: true,
+          operacao: true,
+          data_instalacao: true,
+          unidade_id: true,
+          modelo_id: true
+        }
+      });
+      const existingByPlate = new Map(existingRows.map(item => [item.placa, item]));
+
+      const operations = normalizedRows.map(({ row, p, uid, mid, dataInst }) => {
+        const existing = existingByPlate.get(p);
+        const data = {
+          descricao_veiculo: row.descricao_veiculo || existing?.descricao_veiculo || null,
+          modulo: row.modulo || existing?.modulo || null,
+          operacao: row.operacao || existing?.operacao || null,
+          data_instalacao: dataInst || existing?.data_instalacao || new Date(),
+          unidade_id: uid ?? existing?.unidade_id ?? null,
+          modelo_id: mid ?? existing?.modelo_id ?? null
+        };
+
+        return existing
+          ? prisma.instalacoes.update({ where: { id: existing.id }, data })
+          : prisma.instalacoes.create({ data: { placa: p, ...data } });
+      });
+      await prisma.$transaction(operations, { timeout: 60000 });
+
+      const atualizados = existingRows.length;
+      const inseridos = normalizedRows.length - atualizados;
 
       res.status(200).json({
         mensagem: 'Sincronização concluída com sucesso!',
         relatorio: {
           inseridos,
           atualizados,
-          total: rows.length
+          total: normalizedRows.length,
+          ignorados: rows.length - normalizedRows.length
         }
       });
     } catch (error) {
@@ -633,8 +672,6 @@ export default function createGestaoSolarRouter(prisma) {
         };
       }
 
-      const total = await prisma.retiradas.count({ where });
-
       const queryOptions = {
         where,
         include: {
@@ -660,7 +697,10 @@ export default function createGestaoSolarRouter(prisma) {
         queryOptions.take = limit;
       }
 
-      const retiradas = await prisma.retiradas.findMany(queryOptions);
+      const [retiradas, total] = await Promise.all([
+        prisma.retiradas.findMany(queryOptions),
+        paginated ? prisma.retiradas.count({ where }) : Promise.resolve(null)
+      ]);
 
       if (paginated) {
         return res.status(200).json({
@@ -1090,17 +1130,17 @@ export default function createGestaoSolarRouter(prisma) {
 
       const scripts = {};
       scriptsRaw.forEach(s => {
-        scripts[s.unidade] = { url: s.arquivo_url, nome: s.arquivo_nome, updated_at: s.updated_at };
+        scripts[s.unidade] = { url: Boolean(s.arquivo_url), nome: s.arquivo_nome, updated_at: s.updated_at, type: 'script', identifier: s.unidade };
       });
 
       const bibliotecas = {};
       bibliotecasRaw.forEach(b => {
-        bibliotecas[b.id] = { url: b.arquivo_url, nome: b.arquivo_nome, updated_at: b.updated_at };
+        bibliotecas[b.id] = { url: Boolean(b.arquivo_url), nome: b.arquivo_nome, updated_at: b.updated_at, type: 'lib', identifier: b.id };
       });
 
       const perfis = {};
       perfisRaw.forEach(p => {
-        perfis[p.nome] = { url: p.arquivo_url, nome: p.arquivo_nome, updated_at: p.updated_at };
+        perfis[p.nome] = { url: Boolean(p.arquivo_url), nome: p.arquivo_nome, updated_at: p.updated_at, type: 'perfil', identifier: p.nome };
       });
 
       const unidadesCaminhao = [
@@ -1123,105 +1163,141 @@ export default function createGestaoSolarRouter(prisma) {
     }
   });
 
+  router.get('/tutoriais/download-url', async (req, res, next) => {
+    try {
+      const { type, identifier } = z.object({
+        type: z.enum(['script', 'lib', 'perfil']),
+        identifier: z.string().trim().min(1).max(200)
+      }).parse(req.query);
+
+      let record;
+      if (type === 'script') {
+        record = await prisma.scripts_unidades.findUnique({
+          where: { unidade: identifier },
+          select: { arquivo_url: true, arquivo_nome: true }
+        });
+      } else if (type === 'lib') {
+        record = await prisma.bibliotecas_can.findUnique({
+          where: { id: identifier },
+          select: { arquivo_url: true, arquivo_nome: true }
+        });
+      } else {
+        record = await prisma.perfis_motos.findUnique({
+          where: { nome: identifier },
+          select: { arquivo_url: true, arquivo_nome: true }
+        });
+      }
+
+      const objectPath = extractObjectPath(record?.arquivo_url, TUTORIAL_BUCKET);
+      if (!objectPath) return res.status(404).json({ status: 'error', message: 'Arquivo não encontrado.' });
+
+      const url = await createPrivateDownloadUrl({
+        bucket: TUTORIAL_BUCKET,
+        objectPath,
+        downloadName: record.arquivo_nome,
+        expiresIn: 60
+      });
+      res.status(200).json({ status: 'success', data: { url, expiresIn: 60 } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Upload de arquivos (Scripts de Unidade, Bibliotecas CAN ou Perfis de Moto)
   router.post('/tutoriais/upload', uploadMemory.single('file'), async (req, res, next) => {
+    let uploadedPath = null;
     try {
       const file = req.file;
-      const { type, identifier, nome } = req.body;
+      const { type, identifier, nome } = z.object({
+        type: z.enum(['script', 'lib', 'perfil']),
+        identifier: z.string().trim().min(1).max(200),
+        nome: z.string().trim().max(200).optional()
+      }).parse(req.body);
 
       if (!file) {
         return res.status(400).json({ status: 'error', message: 'Nenhum arquivo enviado.' });
       }
-      if (!type || !identifier) {
-        return res.status(400).json({ status: 'error', message: 'Tipo e identificador são obrigatórios.' });
-      }
-
-      const fileExt = file.originalname.slice(file.originalname.lastIndexOf('.')) || '';
       const cleanId = identifier.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-      const fileNameSafe = `${type}_${cleanId}_${Date.now()}${fileExt}`;
-
-      // Upload para o Supabase Storage bucket arquivos_tutoriais
-      const storageEndpoint = `${SUPABASE_STORAGE_URL}/storage/v1/object/arquivos_tutoriais/${encodeURIComponent(fileNameSafe)}`;
-      const uploadRes = await fetch(storageEndpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': file.mimetype || 'application/octet-stream',
-          'x-upsert': 'true'
-        },
-        body: file.buffer
+      const uploaded = await uploadPrivateFile({
+        bucket: TUTORIAL_BUCKET,
+        file,
+        prefix: `${type}/${cleanId}`,
+        validate: validateTutorialFile
       });
-
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text();
-        console.error('Supabase storage upload error:', errText);
-        throw new Error(`Erro ao enviar arquivo para o storage: ${uploadRes.statusText}`);
-      }
-
-      const publicUrl = `${SUPABASE_STORAGE_URL}/storage/v1/object/public/arquivos_tutoriais/${encodeURIComponent(fileNameSafe)}`;
+      uploadedPath = uploaded.path;
 
       let record;
+      let previousValue = null;
       if (type === 'script') {
+        previousValue = (await prisma.scripts_unidades.findUnique({ where: { unidade: identifier }, select: { arquivo_url: true } }))?.arquivo_url;
         record = await prisma.scripts_unidades.upsert({
           where: { unidade: identifier },
           update: {
             arquivo_nome: file.originalname,
-            arquivo_url: publicUrl,
+            arquivo_url: uploaded.path,
             updated_at: new Date()
           },
           create: {
             unidade: identifier,
             arquivo_nome: file.originalname,
-            arquivo_url: publicUrl,
+            arquivo_url: uploaded.path,
             updated_at: new Date()
           }
         });
       } else if (type === 'lib') {
+        previousValue = (await prisma.bibliotecas_can.findUnique({ where: { id: identifier }, select: { arquivo_url: true } }))?.arquivo_url;
         record = await prisma.bibliotecas_can.upsert({
           where: { id: identifier },
           update: {
             nome: nome || identifier,
             arquivo_nome: file.originalname,
-            arquivo_url: publicUrl,
+            arquivo_url: uploaded.path,
             updated_at: new Date()
           },
           create: {
             id: identifier,
             nome: nome || identifier,
             arquivo_nome: file.originalname,
-            arquivo_url: publicUrl,
+            arquivo_url: uploaded.path,
             updated_at: new Date()
           }
         });
       } else if (type === 'perfil') {
+        previousValue = (await prisma.perfis_motos.findUnique({ where: { nome: identifier }, select: { arquivo_url: true } }))?.arquivo_url;
         record = await prisma.perfis_motos.upsert({
           where: { nome: identifier },
           update: {
             arquivo_nome: file.originalname,
-            arquivo_url: publicUrl,
+            arquivo_url: uploaded.path,
             updated_at: new Date()
           },
           create: {
             nome: identifier,
             arquivo_nome: file.originalname,
-            arquivo_url: publicUrl,
+            arquivo_url: uploaded.path,
             updated_at: new Date()
           }
         });
-      } else {
-        return res.status(400).json({ status: 'error', message: 'Tipo inválido (deve ser script, lib ou perfil).' });
+      }
+
+      const previousPath = extractObjectPath(previousValue, TUTORIAL_BUCKET);
+      if (previousPath && previousPath !== uploaded.path) {
+        await Promise.allSettled([deletePrivateFile({ bucket: TUTORIAL_BUCKET, objectPath: previousPath })]);
       }
 
       res.status(200).json({
         status: 'success',
         message: 'Arquivo enviado e atualizado com sucesso.',
         data: {
-          url: publicUrl,
+          url: true,
           nome: file.originalname,
           record
         }
       });
     } catch (error) {
+      if (uploadedPath) {
+        await Promise.allSettled([deletePrivateFile({ bucket: TUTORIAL_BUCKET, objectPath: uploadedPath })]);
+      }
       next(error);
     }
   });

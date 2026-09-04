@@ -56,11 +56,11 @@ export default function Home({
   }, []);
 
 
-  // GSAP Entrance Stagger with null-check safeguard
+  // GSAP Entrance Stagger with null-check safeguard and cleanup
   useEffect(() => {
     const validCards = (cardsRef.current || []).filter(el => el !== null && el !== undefined);
     if (!loading && validCards.length > 0 && !selectedCategoryId && !searchQuery) {
-      gsap.fromTo(
+      const anim = gsap.fromTo(
         validCards,
         { opacity: 0, y: 15 },
         { 
@@ -72,6 +72,7 @@ export default function Home({
           overwrite: 'auto'
         }
       );
+      return () => anim.kill();
     }
   }, [loading, categories, selectedCategoryId, searchQuery]);
 

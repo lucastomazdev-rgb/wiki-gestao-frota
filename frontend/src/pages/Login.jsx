@@ -11,6 +11,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [setupToken, setSetupToken] = useState('');
+  const [setupTokenConfigured, setSetupTokenConfigured] = useState(true);
   
   const [validationErrors, setValidationErrors] = useState({});
   const [apiError, setApiError] = useState('');
@@ -20,9 +22,12 @@ export default function Login() {
     let isMounted = true;
     api.get('/auth/setup-status')
       .then(res => {
-        if (isMounted && res.data?.data?.requiresSetup) {
-          setRequiresSetup(true);
-          setIsRegister(true);
+        if (isMounted) {
+          setSetupTokenConfigured(Boolean(res.data?.data?.setupTokenConfigured));
+          if (res.data?.data?.requiresSetup) {
+            setRequiresSetup(true);
+            setIsRegister(true);
+          }
         }
       })
       .catch(() => {});
@@ -41,12 +46,16 @@ export default function Login() {
 
     if (!password) {
       errors.password = 'Senha é obrigatória';
-    } else if (password.length < 6) {
-      errors.password = 'A senha deve conter pelo menos 6 caracteres';
+    } else if (isRegister && password.length < 12) {
+      errors.password = 'A senha deve conter pelo menos 12 caracteres';
     }
 
     if (isRegister && !name.trim()) {
       errors.name = 'Nome é obrigatório';
+    }
+
+    if (requiresSetup && setupToken.length < 32) {
+      errors.setupToken = 'Informe o token inicial de ao menos 32 caracteres configurado no Render';
     }
 
     setValidationErrors(errors);
@@ -62,7 +71,7 @@ export default function Login() {
     setIsSubmitting(true);
     try {
       if (isRegister) {
-        await register(email, password, name);
+        await register(email, password, name, requiresSetup ? setupToken : '');
       } else {
         await login(email, password);
       }
@@ -110,9 +119,41 @@ export default function Login() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {requiresSetup && (
+            <div>
+              <label htmlFor="setup-token" className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+                Token seguro de configuração inicial
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                  <ShieldAlert size={16} aria-hidden="true" />
+                </span>
+                <input
+                  id="setup-token"
+                  type="password"
+                  autoComplete="off"
+                  value={setupToken}
+                  onChange={(e) => setSetupToken(e.target.value)}
+                  aria-invalid={Boolean(validationErrors.setupToken)}
+                  className={`w-full bg-slate-800/70 border ${
+                    validationErrors.setupToken ? 'border-amber-500/50 focus:border-amber-500' : 'border-white/10 focus:border-amber-500/50'
+                  } text-white pl-10 pr-4 py-3 text-sm rounded-xl outline-none transition-all font-sans`}
+                />
+              </div>
+              {validationErrors.setupToken && (
+                <span className="text-[11px] text-amber-400 mt-1 block font-sans">{validationErrors.setupToken}</span>
+              )}
+              {!setupTokenConfigured && (
+                <span className="text-[11px] text-red-300 mt-1 block font-sans">
+                  Defina INITIAL_SETUP_TOKEN no Render antes de criar o primeiro administrador.
+                </span>
+              )}
+            </div>
+          )}
+
           {isRegister && (
             <div>
-              <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+              <label htmlFor="name" className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
                 Nome Completo
               </label>
               <div className="relative">
@@ -120,7 +161,9 @@ export default function Login() {
                   <User size={16} />
                 </span>
                 <input
+                  id="name"
                   type="text"
+                  autoComplete="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: João Silva"
@@ -136,7 +179,7 @@ export default function Login() {
           )}
 
           <div>
-            <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+            <label htmlFor="email" className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
               E-mail Operacional
             </label>
             <div className="relative">
@@ -144,7 +187,9 @@ export default function Login() {
                 <Mail size={16} />
               </span>
               <input
+                id="email"
                 type="email"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nome.sobrenome@solar.com"
@@ -159,7 +204,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
+            <label htmlFor="password" className="block text-xs font-sans text-slate-300 mb-1.5 font-medium">
               Senha de Acesso
             </label>
             <div className="relative">
@@ -167,7 +212,9 @@ export default function Login() {
                 <Lock size={16} />
               </span>
               <input
+                id="password"
                 type="password"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="******"

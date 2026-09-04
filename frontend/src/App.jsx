@@ -1,20 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth, api } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ToastContainer from './components/ui/ToastContainer';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Footer from './components/Footer';
-import Login from './pages/Login';
-import Home from './pages/Home';
-import ArticleDetail from './pages/ArticleDetail';
-import AdminDashboard from './pages/AdminDashboard';
 import SidebarGestaoSolar from './components/SidebarGestaoSolar';
-import TabelaVeiculos from './components/TabelaVeiculos';
-import Retiradas from './components/gestao-solar/Retiradas';
-import Tutoriais from './components/gestao-solar/Tutoriais';
 import { 
   Download, 
   FileText, 
@@ -29,6 +22,15 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const Login = lazy(() => import('./pages/Login'));
+const Home = lazy(() => import('./pages/Home'));
+const ArticleDetail = lazy(() => import('./pages/ArticleDetail'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const TabelaVeiculos = lazy(() => import('./components/TabelaVeiculos'));
+const Retiradas = lazy(() => import('./components/gestao-solar/Retiradas'));
+const Tutoriais = lazy(() => import('./components/gestao-solar/Tutoriais'));
+const GestaoTecnicosTerceirizados = lazy(() => import('./components/gestao-solar/tecnicos/GestaoTecnicosTerceirizados'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -88,12 +90,33 @@ function AppContent() {
       category: 'Procedimentos Operacionais',
       type: 'MANUAL OPERACIONAL',
       description: 'Manual de procedimentos, fluxos operacionais e diretrizes para credenciamento e solicitação de acesso ao CCR.',
-      url: '/documents/GUIA%20OPERACIONAL%20DE%20ACESSO%20AO%20CCR.pdf',
+      apiPath: '/documents/guia-operacional-ccr',
       downloadFilename: 'GUIA OPERACIONAL DE ACESSO AO CCR.pdf',
       size: '9.8 MB',
       updatedAt: 'Oficial'
     }
   ];
+
+  const openTechnicalFile = async (file, download = false) => {
+    const popup = download ? null : window.open('about:blank', '_blank');
+    if (popup) popup.opener = null;
+    try {
+      const response = await api.get(file.apiPath, { responseType: 'blob' });
+      const objectUrl = URL.createObjectURL(response.data);
+      if (download) {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = file.downloadFilename;
+        link.click();
+      } else if (popup) {
+        popup.location.replace(objectUrl);
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      popup?.close();
+      toast.error(error.response?.data?.message || 'Não foi possível acessar o documento.');
+    }
+  };
 
   if (loading) {
     return (
@@ -174,7 +197,7 @@ function AppContent() {
                 </span>
                 <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-400" />
                 <span className="font-extrabold text-slate-900 truncate">
-                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : (currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : (currentSolarTab === 'tutoriais' ? 'Tutoriais & Conhecimentos Gerais' : currentSolarTab))}
+                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : (currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : (currentSolarTab === 'tecnicos' ? 'Técnicos & Serviços Terceirizados' : (currentSolarTab === 'tutoriais' ? 'Tutoriais & Conhecimentos Gerais' : currentSolarTab)))}
                 </span>
               </nav>
             </div>
@@ -202,6 +225,9 @@ function AppContent() {
             )}
             {currentSolarTab === 'retiradas' && (
               <Retiradas />
+            )}
+            {currentSolarTab === 'tecnicos' && (
+              <GestaoTecnicosTerceirizados />
             )}
             {currentSolarTab === 'tutoriais' && (
               <Tutoriais />
@@ -340,24 +366,23 @@ function AppContent() {
                       </div>
 
                       <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between gap-3">
-                        <a
-                          href={file.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => openTechnicalFile(file)}
                           className="flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
                         >
                           <ExternalLink size={14} />
                           <span>Visualizar</span>
-                        </a>
+                        </button>
 
-                        <a
-                          href={file.url}
-                          download={file.downloadFilename}
+                        <button
+                          type="button"
+                          onClick={() => openTechnicalFile(file, true)}
                           className="flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 transition-all cursor-pointer"
                         >
                           <Download size={14} strokeWidth={2.5} />
                           <span>Baixar PDF</span>
-                        </a>
+                        </button>
                       </div>
                     </motion.div>
                   ))}
@@ -391,7 +416,14 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ToastProvider>
-          <AppContent />
+          <Suspense fallback={(
+            <div className="min-h-screen bg-slate-950 flex items-center justify-center" role="status">
+              <span className="h-8 w-8 border-2 border-white/10 border-t-amber-500 rounded-full animate-spin" />
+              <span className="sr-only">Carregando módulo…</span>
+            </div>
+          )}>
+            <AppContent />
+          </Suspense>
         </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>

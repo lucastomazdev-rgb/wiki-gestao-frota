@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -15,37 +14,10 @@ const prisma = new PrismaClient({
 async function main() {
   console.log('Iniciando semeação do banco de dados (Seeding)...');
 
-  // 1. Criar ou Atualizar Usuários Padrão (Sem deletar usuários cadastrados via Admin)
-  const adminPasswordHash = await bcrypt.hash('solaradmin123', 12);
-  const userPasswordHash = await bcrypt.hash('tecnico123', 12);
+  // Usuários nunca são criados por seed. O primeiro administrador deve usar
+  // o fluxo protegido por INITIAL_SETUP_TOKEN; os demais são criados no painel.
 
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@solar.com' },
-    update: {},
-    create: {
-      email: 'admin@solar.com',
-      name: 'Supervisor Solar',
-      passwordHash: adminPasswordHash,
-      role: 'ADMIN'
-    }
-  });
-
-  const tech = await prisma.user.upsert({
-    where: { email: 'tecnico@solar.com' },
-    update: {},
-    create: {
-      email: 'tecnico@solar.com',
-      name: 'Técnico de Instalação',
-      passwordHash: userPasswordHash,
-      role: 'USER'
-    }
-  });
-
-  console.log('✓ Usuários padrão garantidos:');
-  console.log('  - Admin: admin@solar.com / solaradmin123');
-  console.log('  - Técnico: tecnico@solar.com / tecnico123');
-
-  // 2. Criar ou Atualizar Categorias
+  // 1. Criar ou Atualizar Categorias
   const catInstalacao = await prisma.category.upsert({
     where: { slug: 'instalacao-fisica' },
     update: {},

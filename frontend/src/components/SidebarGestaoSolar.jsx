@@ -8,7 +8,8 @@ import {
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
-  BookOpen
+  BookOpen,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -40,6 +41,7 @@ export default function SidebarGestaoSolar({
   const navItems = [
     { key: 'veiculos', label: 'Veículos & Frota', icon: Truck },
     { key: 'retiradas', label: 'Retiradas & Baixas', icon: LogOut },
+    { key: 'tecnicos', label: 'Técnicos Terceirizados', icon: Users },
     { key: 'tutoriais', label: 'Conhecimentos Gerais', icon: BookOpen },
   ];
 

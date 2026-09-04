@@ -8,16 +8,50 @@ import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { protect, restrictTo } from './middleware/auth.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  authenticateToken,
+  createProtect,
+  JWT_AUDIENCE,
+  JWT_ISSUER,
+  readRequestToken,
+  restrictTo
+} from './middleware/auth.js';
 import createGestaoSolarRouter from './routes/gestaoSolar.js';
+import createTecnicosTerceirizadosRouter from './routes/tecnicosTerceirizados.js';
 
 dotenv.config();
 
 const prisma = new PrismaClient();
 const app = express();
+const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'dev-fallback-secret-key-change-in-production');
-const JWT_EXPIRES_IN = '7d';
+const JWT_EXPIRES_IN = '12h';
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('timing-only-password-value', 12);
+const protect = createProtect(prisma);
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/',
+  maxAge: SESSION_MAX_AGE_MS
+};
+
+const signSessionToken = (user) => jwt.sign(
+  { sessionVersion: user.sessionVersion },
+  JWT_SECRET,
+  {
+    algorithm: 'HS256',
+    audience: JWT_AUDIENCE,
+    issuer: JWT_ISSUER,
+    subject: user.id,
+    expiresIn: JWT_EXPIRES_IN
+  }
+);
 
 if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('ERRO CRÍTICO: JWT_SECRET não configurado em ambiente de produção!');
@@ -28,7 +62,12 @@ app.disable('x-powered-by');
 
 // 🛡️ Security Middleware - Helmet HTTP Headers
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"]
+    }
+  },
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
@@ -52,7 +91,7 @@ if (process.env.NODE_ENV === 'production') {
 // ⚡ Rate Limiter Global para rotas da API (Proteção contra DoS)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 300, // limite de 300 requisições por IP
+  max: 1000, // adequado para ~7 usuários atrás do mesmo IP corporativo
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -61,11 +100,16 @@ const apiLimiter = rateLimit({
   }
 });
 app.use('/api', apiLimiter);
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 // ⚡ Rate Limiting estrito para Login e Rotas de Auth
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 20, // limite de 20 tentativas por IP
+  max: 30,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -87,6 +131,7 @@ const allowedOrigins = [
   'http://127.0.0.1:5174',
   ...configuredClientUrls
 ];
+const allowedOriginSet = new Set(allowedOrigins.map(origin => origin.replace(/\/+$/, '')));
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -98,28 +143,54 @@ app.use(cors({
     const normalizedOrigin = origin.replace(/\/+$/, '');
 
     // Verificar correspondência exata com origens permitidas
-    if (allowedOrigins.includes(normalizedOrigin)) {
+    if (allowedOriginSet.has(normalizedOrigin)) {
       return callback(null, true);
     }
 
-    // Permitir padrão regex configurado via variável de ambiente (se fornecido)
-    if (process.env.ALLOWED_ORIGIN_PATTERN && new RegExp(process.env.ALLOWED_ORIGIN_PATTERN).test(normalizedOrigin)) {
-      return callback(null, true);
+    // Permitir padrão regex configurado via variável de ambiente (se fornecido, ex: preview Vercel)
+    if (process.env.ALLOWED_ORIGIN_REGEX) {
+      try {
+        if (new RegExp(process.env.ALLOWED_ORIGIN_REGEX).test(normalizedOrigin)) {
+          return callback(null, true);
+        }
+      } catch (regexErr) {
+        console.error('ALLOWED_ORIGIN_REGEX inválido:', regexErr.message);
+      }
     }
 
-    return callback(new Error(`Origem [${origin}] não permitida pela política CORS.`));
+    const error = new Error('Origem não permitida pela política CORS.');
+    error.statusCode = 403;
+    return callback(error);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Setup-Token']
 }));
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
-app.use('/images', express.static('public/images'));
+app.use('/api', (req, res, next) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
 
-// Aplicar rate limiter específico nas rotas de autenticação
+  const origin = req.get('origin')?.replace(/\/+$/, '');
+  if (origin && allowedOriginSet.has(origin)) return next();
+  if (origin && process.env.ALLOWED_ORIGIN_REGEX) {
+    try {
+      if (new RegExp(process.env.ALLOWED_ORIGIN_REGEX).test(origin)) return next();
+    } catch {}
+  }
+  if (!origin && (
+    req.get('x-requested-with') === 'XMLHttpRequest'
+    || req.get('authorization')?.startsWith('Bearer ')
+  )) return next();
+
+  return res.status(403).json({
+    status: 'error',
+    message: 'Requisição bloqueada pela proteção contra CSRF.'
+  });
+});
+app.use('/images', express.static('public/images'));
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
@@ -139,16 +210,16 @@ const generateSlug = (text) => {
 
 // Zod Validation Schemas
 const registerSchema = z.object({
-  email: z.string().email('E-mail inválido'),
-  password: z.string().min(6, 'A senha deve ter no mínimo 6 caracteres'),
-  name: z.string().min(2, 'O nome deve ter no mínimo 2 caracteres'),
+  email: z.string().trim().toLowerCase().email('E-mail inválido'),
+  password: z.string().min(12, 'A senha deve ter no mínimo 12 caracteres').max(128),
+  name: z.string().trim().min(2, 'O nome deve ter no mínimo 2 caracteres').max(120),
   role: z.enum(['USER', 'ADMIN']).optional(),
   can_access_gestao_solar: z.boolean().optional()
 });
 
 const loginSchema = z.object({
-  email: z.string().email('E-mail inválido'),
-  password: z.string().min(1, 'Senha é obrigatória')
+  email: z.string().trim().toLowerCase().email('E-mail inválido'),
+  password: z.string().min(1, 'Senha é obrigatória').max(128)
 });
 
 const categorySchema = z.object({
@@ -157,12 +228,30 @@ const categorySchema = z.object({
   iconName: z.string().default('BookOpen')
 });
 
+const httpsOrLocalUrl = z.string().trim().refine((value) => {
+  if (value === '' || value.startsWith('/')) return true;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}, 'Use uma URL HTTPS válida ou um caminho interno.');
+
+const youtubeUrl = httpsOrLocalUrl.refine((value) => {
+  if (value === '') return true;
+  try {
+    return ['youtube.com', 'www.youtube.com', 'youtu.be', 'www.youtube-nocookie.com'].includes(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}, 'O vídeo deve ser hospedado no YouTube.');
+
 const articleSchema = z.object({
   title: z.string().min(3, 'O título deve ter no mínimo 3 caracteres'),
   contentMarkdown: z.string().min(10, 'O conteúdo deve ter no mínimo 10 caracteres'),
   categoryId: z.string().uuid('ID de categoria inválido'),
-  videoUrl: z.string().url('URL do vídeo inválida').or(z.literal('')).optional(),
-  fileDownloadUrl: z.string().url('URL de download inválida').or(z.literal('')).optional()
+  videoUrl: youtubeUrl.optional(),
+  fileDownloadUrl: httpsOrLocalUrl.optional()
 });
 
 // --- AUTHENTICATION ROUTES ---
@@ -174,7 +263,8 @@ app.get('/api/auth/setup-status', async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       data: {
-        requiresSetup: userCount === 0
+        requiresSetup: userCount === 0,
+        setupTokenConfigured: Boolean(process.env.INITIAL_SETUP_TOKEN)
       }
     });
   } catch (error) {
@@ -189,34 +279,31 @@ app.post('/api/auth/register', async (req, res, next) => {
 
     const userCount = await prisma.user.count();
     let isRequestFromAdmin = false;
-    
-    // Se já existirem usuários na base, verificar se a requisição é feita por um ADMIN autenticado
-    if (userCount > 0) {
-      let token = req.cookies?.token;
-      if (!token && req.headers.authorization?.startsWith('Bearer')) {
-        token = req.headers.authorization.split(' ')[1];
-      }
 
+    if (userCount > 0) {
+      const token = readRequestToken(req);
       if (!token) {
         return res.status(401).json({
           status: 'error',
-          message: 'Cadastro público desativado. Apenas administradores autenticados podem cadastrar novos usuários.'
+          message: 'Cadastro público desativado. Apenas administradores autenticados podem cadastrar usuários.'
         });
       }
 
       try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'ADMIN') {
-          return res.status(403).json({
-            status: 'error',
-            message: 'Apenas administradores podem cadastrar novos usuários no sistema.'
-          });
+        const requestingUser = await authenticateToken(prisma, token);
+        if (requestingUser.role !== 'ADMIN') {
+          return res.status(403).json({ status: 'error', message: 'Apenas administradores podem cadastrar usuários.' });
         }
         isRequestFromAdmin = true;
-      } catch (err) {
-        return res.status(401).json({
+      } catch {
+        return res.status(401).json({ status: 'error', message: 'Sessão inválida ou expirada.' });
+      }
+    } else {
+      const configuredSetupToken = process.env.INITIAL_SETUP_TOKEN;
+      if (!configuredSetupToken || configuredSetupToken.length < 32 || req.get('x-setup-token') !== configuredSetupToken) {
+        return res.status(403).json({
           status: 'error',
-          message: 'Sessão inválida ou expirada. Faça login como administrador.'
+          message: 'Configuração inicial bloqueada. Informe um INITIAL_SETUP_TOKEN seguro no servidor.'
         });
       }
     }
@@ -235,31 +322,31 @@ app.post('/api/auth/register', async (req, res, next) => {
     const assignedRole = userCount === 0 ? 'ADMIN' : (validatedData.role || 'USER');
     const canAccessSolar = assignedRole === 'ADMIN' || Boolean(validatedData.can_access_gestao_solar);
 
-    const user = await prisma.user.create({
-      data: {
-        email: validatedData.email,
-        passwordHash,
-        name: validatedData.name,
-        role: assignedRole,
-        can_access_gestao_solar: canAccessSolar
-      }
-    });
+    const userData = {
+      email: validatedData.email,
+      passwordHash,
+      name: validatedData.name,
+      role: assignedRole,
+      can_access_gestao_solar: canAccessSolar
+    };
+
+    const user = userCount === 0
+      ? await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(741852963)`;
+        if (await tx.user.count()) {
+          const error = new Error('A configuração inicial já foi concluída.');
+          error.statusCode = 409;
+          throw error;
+        }
+        return tx.user.create({ data: userData });
+      })
+      : await prisma.user.create({ data: userData });
 
     let token = null;
     // Se a requisição NÃO veio de um Admin já logado (ex: primeiro cadastro), define o cookie de login
     if (!isRequestFromAdmin) {
-      token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, name: user.name, can_access_gestao_solar: canAccessSolar },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-      );
-
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 dias
-      });
+      token = signSessionToken(user);
+      res.cookie('token', token, cookieOptions);
     }
 
     res.status(201).json({
@@ -271,8 +358,7 @@ app.post('/api/auth/register', async (req, res, next) => {
           name: user.name,
           role: user.role,
           can_access_gestao_solar: canAccessSolar
-        },
-        token: token || undefined
+        }
       }
     });
   } catch (error) {
@@ -289,26 +375,15 @@ app.post('/api/auth/login', async (req, res, next) => {
       where: { email: validatedData.email }
     });
 
-    if (!user || !(await bcrypt.compare(validatedData.password, user.passwordHash))) {
+    const passwordMatches = await bcrypt.compare(validatedData.password, user?.passwordHash || DUMMY_PASSWORD_HASH);
+    if (!user || !passwordMatches) {
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha incorretos.' });
     }
 
     const canAccessSolar = user.role === 'ADMIN' || Boolean(user.can_access_gestao_solar);
 
-    // Sign JWT
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name, can_access_gestao_solar: canAccessSolar },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-    // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    const token = signSessionToken(user);
+    res.cookie('token', token, cookieOptions);
 
     res.status(200).json({
       status: 'success',
@@ -319,8 +394,7 @@ app.post('/api/auth/login', async (req, res, next) => {
           name: user.name,
           role: user.role,
           can_access_gestao_solar: canAccessSolar
-        },
-        token
+        }
       }
     });
   } catch (error) {
@@ -329,44 +403,36 @@ app.post('/api/auth/login', async (req, res, next) => {
 });
 
 // Logout
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', protect, async (req, res, next) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { sessionVersion: { increment: 1 } }
+    });
   res.clearCookie('token', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/'
   });
-  res.status(200).json({ status: 'success', message: 'Logout realizado com sucesso.' });
+    res.status(200).json({ status: 'success', message: 'Logout realizado com sucesso.' });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Get current session
 app.get('/api/auth/me', protect, async (req, res, next) => {
   try {
-    if (!req.user?.id) {
-      return res.status(401).json({ status: 'error', message: 'Sessão inválida. Faça login novamente.' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        can_access_gestao_solar: true,
-        createdAt: true
-      }
-    });
-
-    if (!user) {
-      return res.status(401).json({ status: 'error', message: 'Usuário não encontrado.' });
-    }
-
     res.status(200).json({
       status: 'success',
       data: {
         user: {
-          ...user,
-          can_access_gestao_solar: user.role === 'ADMIN' || Boolean(user.can_access_gestao_solar)
+          id: req.user.id,
+          email: req.user.email,
+          name: req.user.name,
+          role: req.user.role,
+          can_access_gestao_solar: req.user.can_access_gestao_solar
         }
       }
     });
@@ -401,12 +467,15 @@ app.get('/api/users', protect, restrictTo('ADMIN'), async (req, res, next) => {
 app.patch('/api/users/:id/gestao-solar', protect, restrictTo('ADMIN'), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { can_access_gestao_solar } = req.body;
+    const { can_access_gestao_solar } = z.object({
+      can_access_gestao_solar: z.boolean()
+    }).strict().parse(req.body);
 
     const updatedUser = await prisma.user.update({
       where: { id },
       data: {
-        can_access_gestao_solar: Boolean(can_access_gestao_solar)
+        can_access_gestao_solar,
+        sessionVersion: { increment: 1 }
       },
       select: {
         id: true,
@@ -477,14 +546,21 @@ app.put('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) =
     }
 
     if (can_access_gestao_solar !== undefined) {
-      dataToUpdate.can_access_gestao_solar = Boolean(can_access_gestao_solar);
+      if (typeof can_access_gestao_solar !== 'boolean') {
+        return res.status(400).json({ status: 'error', message: 'Permissão Gestão Solar inválida.' });
+      }
+      dataToUpdate.can_access_gestao_solar = can_access_gestao_solar;
     }
 
     if (password && password.trim().length > 0) {
-      if (password.length < 6) {
-        return res.status(400).json({ status: 'error', message: 'A nova senha deve ter no mínimo 6 caracteres.' });
+      if (password.length < 12 || password.length > 128) {
+        return res.status(400).json({ status: 'error', message: 'A nova senha deve ter entre 12 e 128 caracteres.' });
       }
       dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
+    }
+
+    if (Object.keys(dataToUpdate).length > 0) {
+      dataToUpdate.sessionVersion = { increment: 1 };
     }
 
     const updatedUser = await prisma.user.update({
@@ -597,6 +673,15 @@ app.delete('/api/categories/:id', protect, restrictTo('ADMIN'), async (req, res,
 
 // --- ARTICLES ROUTES ---
 
+app.get('/api/documents/guia-operacional-ccr', protect, (req, res, next) => {
+  const filePath = path.join(serverDirectory, 'private', 'documents', 'guia-operacional-ccr.pdf');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Disposition', 'inline; filename="guia-operacional-ccr.pdf"');
+  res.sendFile(filePath, (error) => {
+    if (error && !res.headersSent) next(error);
+  });
+});
+
 // Get all articles (with text search & category filter)
 app.get('/api/articles', protect, async (req, res, next) => {
   try {
@@ -616,7 +701,16 @@ app.get('/api/articles', protect, async (req, res, next) => {
 
     const articles = await prisma.article.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        viewCount: true,
+        categoryId: true,
+        videoUrl: true,
+        fileDownloadUrl: true,
+        createdAt: true,
+        updatedAt: true,
         category: {
           select: { name: true, slug: true }
         }
@@ -742,7 +836,8 @@ app.delete('/api/articles/:id', protect, restrictTo('ADMIN'), async (req, res, n
 });
 
 // --- ROTAS DO MÓDULO GESTÃO SOLAR ---
-app.use('/api', createGestaoSolarRouter(prisma));
+app.use('/api', createGestaoSolarRouter(prisma, protect));
+app.use('/api/gestao-solar', createTecnicosTerceirizadosRouter(prisma, protect));
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
@@ -757,11 +852,30 @@ app.use((err, req, res, next) => {
     });
   }
 
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ status: 'error', message: 'JSON inválido.' });
+  }
+
+  if (String(err?.code || '').startsWith('LIMIT_')) {
+    return res.status(413).json({ status: 'error', message: 'Arquivo excede o limite ou a quantidade permitida.' });
+  }
+
   // Prisma unique constraint error
   if (err.code === 'P2002') {
     return res.status(400).json({
       status: 'error',
       message: 'Um registro com estes dados únicos já existe no banco de dados.'
+    });
+  }
+
+  if (err.code === 'P2025') {
+    return res.status(404).json({ status: 'error', message: 'Registro não encontrado.' });
+  }
+
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({
+      status: 'error',
+      message: err.message
     });
   }
 

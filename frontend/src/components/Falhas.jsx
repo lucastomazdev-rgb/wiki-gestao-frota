@@ -160,7 +160,6 @@ export default function Falhas() {
     return () => {
       controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paginaAtual, filtroUF, filtroUnidade, filtroTipo, filtroStatus, filtroPlacaDebounced, ordenacaoFalhas]);
 
   const {

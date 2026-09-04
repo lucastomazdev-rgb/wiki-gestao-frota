@@ -40,6 +40,7 @@ build/
 # ==========================================
 # 🤖 ARQUIVOS DE AGENTE, IA & DOCUMENTAÇÃO (.md)
 # ==========================================
+
 .agent/
 .agents/
 .gemini/

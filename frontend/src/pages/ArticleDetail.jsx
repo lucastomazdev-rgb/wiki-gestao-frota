@@ -73,14 +73,17 @@ export default function ArticleDetail({ articleSlug, onBack }) {
   const getEmbedUrl = (url) => {
     if (!url) return null;
     try {
-      if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-        const match = url.match(regExp);
-        return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+      const parsed = new URL(url);
+      let videoId = null;
+      if (parsed.hostname === 'youtu.be') videoId = parsed.pathname.slice(1);
+      if (['www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com'].includes(parsed.hostname)) {
+        videoId = parsed.searchParams.get('v') || parsed.pathname.split('/embed/')[1];
       }
-      return url;
-    } catch (e) {
-      return url;
+      return /^[a-zA-Z0-9_-]{11}$/.test(videoId || '')
+        ? `https://www.youtube-nocookie.com/embed/${videoId}`
+        : null;
+    } catch {
+      return null;
     }
   };
 
@@ -126,7 +129,12 @@ export default function ArticleDetail({ articleSlug, onBack }) {
     };
 
     const rawMarkup = marked.parse(markdown, { renderer });
-    return DOMPurify.sanitize(rawMarkup, { ADD_ATTR: ['target', 'id', 'class', 'style'] });
+    return DOMPurify.sanitize(rawMarkup, {
+      USE_PROFILES: { html: true },
+      ADD_ATTR: ['target', 'id'],
+      FORBID_TAGS: ['style', 'form', 'iframe', 'object', 'embed'],
+      FORBID_ATTR: ['style']
+    });
   };
 
   if (loading) {
@@ -251,6 +259,9 @@ export default function ArticleDetail({ articleSlug, onBack }) {
                   src={videoEmbed}
                   title="Tutorial em Vídeo"
                   className="absolute inset-0 h-full w-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 ></iframe>

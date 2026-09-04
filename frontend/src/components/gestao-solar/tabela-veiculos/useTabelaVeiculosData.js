@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import { exportRowsToCsv } from '../../../utils/exportCsv';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -187,10 +187,7 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
       'Instalação (R$)': Number(veiculo.modelos_rastreadores?.valor_instalacao || 0).toFixed(2)
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatório Frotas');
-    XLSX.writeFile(workbook, 'Relatório_Veículos_Solar.xlsx');
+    exportRowsToCsv(dadosFormatados, 'Relatório_Veículos_Solar.csv');
   };
 
   const handleAbrirRetirada = (veiculo) => {

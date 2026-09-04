@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import { exportRowsToCsv } from '../../../utils/exportCsv';
 import toast from 'react-hot-toast';
 import api from '../../../services/api';
 import { useDebounce } from '../../../hooks/useDebounce';
@@ -209,15 +209,11 @@ export function useRetiradasData({ avisarMudanca } = {}) {
         'Motivo': r.motivo || '-'
       }));
 
-      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Histórico de Retiradas');
-
       const dateStr = new Date().toISOString().split('T')[0];
-      XLSX.writeFile(workbook, `Relatorio_Retiradas_${dateStr}.xlsx`);
-      toast.success('Relatório Excel exportado com sucesso!', { id: toastId });
+      exportRowsToCsv(dataToExport, `Relatorio_Retiradas_${dateStr}.csv`);
+      toast.success('Relatório CSV exportado com sucesso!', { id: toastId });
     } catch (error) {
-      toast.error('Erro ao gerar relatório Excel.', { id: toastId });
+      toast.error('Erro ao gerar relatório CSV.', { id: toastId });
     }
   }, [filtrosApi]);
 
