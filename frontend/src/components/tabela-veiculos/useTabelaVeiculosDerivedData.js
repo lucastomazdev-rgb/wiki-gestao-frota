@@ -38,14 +38,7 @@ export function useTabelaVeiculosDerivedData({
   const indexPrimeiro = totalRegistros === 0 ? 0 : (paginaAtual - 1) * ITENS_POR_PAGINA + 1;
   const indexUltimo = Math.min(paginaAtual * ITENS_POR_PAGINA, totalRegistros);
   const veiculosPaginados = useMemo(() => {
-    if (!Array.isArray(veiculos)) return [];
-    return [...veiculos].sort((a, b) => {
-      const unidadeA = (a?.unidades_clientes?.nome_unidade || '').trim();
-      const unidadeB = (b?.unidades_clientes?.nome_unidade || '').trim();
-      const comp = unidadeA.localeCompare(unidadeB, 'pt-BR', { sensitivity: 'base' });
-      if (comp !== 0) return comp;
-      return (a?.placa || '').localeCompare(b?.placa || '', 'pt-BR', { sensitivity: 'base' });
-    });
+    return Array.isArray(veiculos) ? veiculos : [];
   }, [veiculos]);
 
   const getPaginasExibidas = useCallback(() => {

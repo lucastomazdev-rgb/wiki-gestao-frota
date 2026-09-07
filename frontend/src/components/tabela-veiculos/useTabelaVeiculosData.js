@@ -37,7 +37,7 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
     [debouncedPlaca, filtroTipo, filtroUF, filtroUnidade]
   );
 
-  const { data: respostaInstalacoes, isLoading: isLoadingVeiculos } = useQuery({
+  const { data: respostaInstalacoes, isLoading: isLoadingVeiculos, isFetching: isFetchingVeiculos } = useQuery({
     queryKey: ['instalacoes', 'list', paginaAtual, ITENS_POR_PAGINA, filtrosApi],
     queryFn: async () => {
       const response = await api.get('/instalacoes', {
@@ -50,20 +50,15 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
       });
       return response.data;
     },
-    staleTime: 1000 * 30
+    staleTime: 1000 * 30,
+    placeholderData: (previousData) => previousData
   });
 
-  const { data: kpisInstalacoes } = useQuery({
-    queryKey: ['instalacoes', 'kpis', filtrosApi],
-    queryFn: async () => {
-      const response = await api.get('/instalacoes/kpis', { params: filtrosApi });
-      return response.data;
-    },
-    staleTime: 1000 * 30
-  });
+  // KPIs atômicos integrados vindos diretamente da mesma requisição da lista
+  const kpisInstalacoes = respostaInstalacoes?.kpis || null;
 
   const veiculos = respostaInstalacoes?.data || [];
-  const totalRegistros = respostaInstalacoes?.pagination?.total || 0;
+  const totalRegistros = respostaInstalacoes?.pagination?.total ?? respostaInstalacoes?.kpis?.total ?? 0;
   const totalPaginasBackend = respostaInstalacoes?.pagination?.total_pages || 1;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -301,6 +296,7 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
     setPaginaAtual,
     filtrosApi,
     isLoadingVeiculos,
+    isFetchingVeiculos,
     kpisInstalacoes,
     veiculos,
     totalRegistros,

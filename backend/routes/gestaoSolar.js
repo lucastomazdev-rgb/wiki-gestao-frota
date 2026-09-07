@@ -34,10 +34,73 @@ export default function createGestaoSolarRouter(prisma, protect) {
   };
 
   // =========================================================================
+  // CACHE EM MEMÓRIA PARA LOOKUPS & METADADOS (REDUÇÃO DE LATÊNCIA)
+  // =========================================================================
+  let modelosCache = { data: null, expiresAt: 0 };
+  let unidadesCache = { data: null, expiresAt: 0 };
+  const CACHE_TTL_MS = 60 * 1000; // 60 segundos de TTL
+
+  const invalidateLookupsCache = () => {
+    modelosCache = { data: null, expiresAt: 0 };
+    unidadesCache = { data: null, expiresAt: 0 };
+  };
+
+  const getCachedModelos = async () => {
+    const now = Date.now();
+    if (modelosCache.data && modelosCache.expiresAt > now) {
+      return modelosCache.data;
+    }
+    const modelos = await prisma.modelos_rastreadores.findMany({
+      orderBy: { nome_modelo: 'asc' }
+    });
+    modelosCache = { data: modelos, expiresAt: now + CACHE_TTL_MS };
+    return modelos;
+  };
+
+  // Helper otimizado para KPIs de Instalações
+  const getKpisInstalacoes = async (where = {}) => {
+    const [grouped, models] = await Promise.all([
+      prisma.instalacoes.groupBy({
+        by: ['modelo_id'],
+        where,
+        _count: { _all: true }
+      }),
+      getCachedModelos()
+    ]);
+
+    const typeByModel = new Map(models.map(model => [model.id, model.tipo_veiculo || '']));
+
+    let caminhao = 0;
+    let moto = 0;
+    let video = 0;
+
+    for (const item of grouped) {
+      const t = (typeByModel.get(item.modelo_id) || '').toUpperCase();
+      const count = item._count._all;
+      if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA')) {
+        caminhao += count;
+      } else if (t.includes('MOTO')) {
+        moto += count;
+      } else if (t.includes('VÍDEO') || t.includes('VIDEO') || t.includes('CÂMER') || t.includes('CAMER') || t.includes('DASH')) {
+        video += count;
+      }
+    }
+
+    return {
+      total: grouped.reduce((sum, item) => sum + item._count._all, 0),
+      tipos: {
+        caminhao,
+        moto,
+        video
+      }
+    };
+  };
+
+  // =========================================================================
   // 1. INSTALAÇÕES (FROTA OPERACIONAL)
   // =========================================================================
 
-  // Listar instalações com paginação e filtros
+  // Listar instalações com paginação, filtros e KPIs atômicos integrados
   router.get('/instalacoes', async (req, res, next) => {
     try {
       const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -101,9 +164,11 @@ export default function createGestaoSolarRouter(prisma, protect) {
         queryOptions.take = limit;
       }
 
-      const [instalacoes, total] = await Promise.all([
+      // Executa consulta dos dados, contagem e KPIs em paralelo garantindo sincronia atômica
+      const [instalacoes, total, kpis] = await Promise.all([
         prisma.instalacoes.findMany(queryOptions),
-        paginated ? prisma.instalacoes.count({ where }) : Promise.resolve(null)
+        paginated ? prisma.instalacoes.count({ where }) : Promise.resolve(null),
+        paginated ? getKpisInstalacoes(where) : Promise.resolve(null)
       ]);
 
       if (paginated) {
@@ -114,7 +179,8 @@ export default function createGestaoSolarRouter(prisma, protect) {
             page,
             limit,
             total_pages: Math.ceil(total / limit) || 1
-          }
+          },
+          kpis
         });
       }
 
@@ -124,7 +190,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
     }
   });
 
-  // KPIs da frota (contadores por categoria)
+  // KPIs da frota (endpoint dedicado mantido para retrocompatibilidade)
   router.get('/instalacoes/kpis', async (req, res, next) => {
     try {
       const { placa, unidade, uf, tipo, operacao } = req.query;
@@ -146,43 +212,8 @@ export default function createGestaoSolarRouter(prisma, protect) {
         where.modelos_rastreadores = { tipo_veiculo: { contains: tipo.trim(), mode: 'insensitive' } };
       }
 
-      const grouped = await prisma.instalacoes.groupBy({
-        by: ['modelo_id'],
-        where,
-        _count: { _all: true }
-      });
-
-      const modelIds = grouped.map(item => item.modelo_id).filter(id => id !== null);
-      const models = await prisma.modelos_rastreadores.findMany({
-        where: { id: { in: modelIds } },
-        select: { id: true, tipo_veiculo: true }
-      });
-      const typeByModel = new Map(models.map(model => [model.id, model.tipo_veiculo || '']));
-
-      let caminhao = 0;
-      let moto = 0;
-      let video = 0;
-
-      for (const item of grouped) {
-        const t = (typeByModel.get(item.modelo_id) || '').toUpperCase();
-        const count = item._count._all;
-        if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA')) {
-          caminhao += count;
-        } else if (t.includes('MOTO')) {
-          moto += count;
-        } else if (t.includes('VÍDEO') || t.includes('VIDEO') || t.includes('CÂMER') || t.includes('CAMER') || t.includes('DASH')) {
-          video += count;
-        }
-      }
-
-      res.status(200).json({
-        total: grouped.reduce((sum, item) => sum + item._count._all, 0),
-        tipos: {
-          caminhao,
-          moto,
-          video
-        }
-      });
+      const kpis = await getKpisInstalacoes(where);
+      res.status(200).json(kpis);
     } catch (error) {
       next(error);
     }
@@ -492,6 +523,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
       const atualizados = existingRows.length;
       const inseridos = normalizedRows.length - atualizados;
 
+      invalidateLookupsCache();
       res.status(200).json({
         mensagem: 'Sincronização concluída com sucesso!',
         relatorio: {
@@ -512,6 +544,11 @@ export default function createGestaoSolarRouter(prisma, protect) {
 
   router.get('/unidades', async (req, res, next) => {
     try {
+      const now = Date.now();
+      if (unidadesCache.data && unidadesCache.expiresAt > now) {
+        return res.status(200).json(unidadesCache.data);
+      }
+
       const rows = await prisma.$queryRaw`
         SELECT 
           u.id, 
@@ -546,6 +583,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
         }
       }));
 
+      unidadesCache = { data: unidades, expiresAt: now + CACHE_TTL_MS };
       res.status(200).json(unidades);
     } catch (error) {
       next(error);
@@ -568,6 +606,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
         }
       });
 
+      invalidateLookupsCache();
       res.status(201).json(nova);
     } catch (error) {
       next(error);
@@ -589,6 +628,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
         }
       });
 
+      invalidateLookupsCache();
       res.status(200).json(atualizada);
     } catch (error) {
       next(error);
@@ -599,6 +639,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
     try {
       const id = parseInt(req.params.id, 10);
       await prisma.unidades_clientes.delete({ where: { id } });
+      invalidateLookupsCache();
       res.status(200).json({ mensagem: 'Unidade excluída com sucesso!' });
     } catch (error) {
       next(error);
@@ -611,9 +652,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
 
   router.get('/modelos', async (req, res, next) => {
     try {
-      const modelos = await prisma.modelos_rastreadores.findMany({
-        orderBy: { nome_modelo: 'asc' }
-      });
+      const modelos = await getCachedModelos();
       res.status(200).json(modelos);
     } catch (error) {
       next(error);
@@ -636,6 +675,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
         }
       });
 
+      invalidateLookupsCache();
       res.status(201).json(novo);
     } catch (error) {
       next(error);
@@ -708,9 +748,11 @@ export default function createGestaoSolarRouter(prisma, protect) {
         queryOptions.take = limit;
       }
 
-      const [retiradas, total] = await Promise.all([
+      // Executa consulta dos dados, contagem e KPIs em paralelo garantindo sincronia atômica
+      const [retiradas, total, kpis] = await Promise.all([
         prisma.retiradas.findMany(queryOptions),
-        paginated ? prisma.retiradas.count({ where }) : Promise.resolve(null)
+        paginated ? prisma.retiradas.count({ where }) : Promise.resolve(null),
+        paginated ? getKpisRetiradas(where) : Promise.resolve(null)
       ]);
 
       if (paginated) {
@@ -721,7 +763,8 @@ export default function createGestaoSolarRouter(prisma, protect) {
             page,
             limit,
             total_pages: Math.ceil(total / limit) || 1
-          }
+          },
+          kpis
         });
       }
 
@@ -731,7 +774,57 @@ export default function createGestaoSolarRouter(prisma, protect) {
     }
   });
 
-  // KPIs de retiradas (volume, taxa cobrada e distribuição por tipo e status)
+  // Helper otimizado para KPIs de Retiradas com agregação em banco (groupBy)
+  const getKpisRetiradas = async (where = {}) => {
+    const [grouped, models] = await Promise.all([
+      prisma.retiradas.groupBy({
+        by: ['modelo_id', 'status'],
+        where,
+        _count: { _all: true }
+      }),
+      getCachedModelos()
+    ]);
+
+    const modelMap = new Map(models.map(m => [m.id, m]));
+
+    let total = 0;
+    let totalReceita = 0;
+    let caminhao = 0;
+    let moto = 0;
+    let video = 0;
+    const statusCounts = {};
+
+    for (const item of grouped) {
+      const count = item._count._all;
+      total += count;
+
+      const st = item.status || 'Retirado';
+      statusCounts[st] = (statusCounts[st] || 0) + count;
+
+      const model = modelMap.get(item.modelo_id);
+      if (st.toLowerCase() === 'retirado') {
+        totalReceita += Number(model?.valor_instalacao || 0) * count;
+      }
+
+      const t = (model?.tipo_veiculo || '').toUpperCase();
+      if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA')) {
+        caminhao += count;
+      } else if (t.includes('MOTO')) {
+        moto += count;
+      } else if (t.includes('VÍDEO') || t.includes('VIDEO') || t.includes('CÂMERA') || t.includes('CAMERA') || t.includes('DASHCAM')) {
+        video += count;
+      }
+    }
+
+    return {
+      total,
+      totalReceita,
+      tipos: { caminhao, moto, video },
+      status: statusCounts
+    };
+  };
+
+  // KPIs de retiradas (endpoint dedicado mantido para retrocompatibilidade)
   router.get('/retiradas/kpis', async (req, res, next) => {
     try {
       const { placa, unidade, uf, tipo, status } = req.query;
@@ -753,85 +846,8 @@ export default function createGestaoSolarRouter(prisma, protect) {
         where.modelos_rastreadores = { tipo_veiculo: { contains: tipo.trim(), mode: 'insensitive' } };
       }
 
-      const itens = await prisma.retiradas.findMany({
-        where,
-        select: {
-          status: true,
-          modelos_rastreadores: {
-            select: { tipo_veiculo: true, valor_instalacao: true }
-          }
-        }
-      });
-
-      let total = itens.length;
-      let totalReceita = 0;
-      let caminhao = 0;
-      let moto = 0;
-      let video = 0;
-      const statusCounts = {};
-
-      for (const item of itens) {
-        const st = item.status || 'Retirado';
-        statusCounts[st] = (statusCounts[st] || 0) + 1;
-
-        if (st.toLowerCase() === 'retirado') {
-          totalReceita += Number(item.modelos_rastreadores?.valor_instalacao || 0);
-        }
-
-        const t = (item.modelos_rastreadores?.tipo_veiculo || '').toUpperCase();
-        if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA')) {
-          caminhao++;
-        } else if (t.includes('MOTO')) {
-          moto++;
-        } else if (t.includes('VÍDEO') || t.includes('VIDEO') || t.includes('CÂMERA') || t.includes('CAMERA') || t.includes('DASHCAM')) {
-          video++;
-        }
-      }
-
-      // Buscar opções únicas de forma agregada e eficiente sem carregar a tabela inteira
-      const [unidadesComRetirada, modelosComRetirada, statusDistintos] = await Promise.all([
-        prisma.unidades_clientes.findMany({
-          where: { retiradas: { some: {} } },
-          select: { nome_unidade: true, uf: true },
-          orderBy: { nome_unidade: 'asc' }
-        }),
-        prisma.modelos_rastreadores.findMany({
-          where: { retiradas: { some: {} } },
-          select: { tipo_veiculo: true },
-          distinct: ['tipo_veiculo'],
-          orderBy: { tipo_veiculo: 'asc' }
-        }),
-        prisma.retiradas.findMany({
-          where: { status: { not: null } },
-          select: { status: true },
-          distinct: ['status']
-        })
-      ]);
-
-      // Se houver filtro de UF selecionado, refina a lista de unidades correspondentes
-      let unidadesBase = unidadesComRetirada;
-      if (uf && uf.trim()) {
-        const ufUpper = uf.trim().toUpperCase();
-        unidadesBase = unidadesBase.filter(r => (r.uf || '').toUpperCase() === ufUpper);
-      }
-
-      const unidadesDisponiveis = [...new Set(unidadesBase.map(r => r.nome_unidade).filter(Boolean))].sort();
-      const ufsDisponiveis = [...new Set(unidadesComRetirada.map(r => r.uf).filter(Boolean))].sort();
-      const tiposDisponiveis = [...new Set(modelosComRetirada.map(r => r.tipo_veiculo).filter(Boolean))].sort();
-      const statusDisponiveis = [...new Set(statusDistintos.map(r => r.status).filter(Boolean))].sort();
-
-      res.status(200).json({
-        total,
-        totalReceita,
-        tipos: { caminhao, moto, video },
-        status: statusCounts,
-        opcoesFiltros: {
-          unidades: unidadesDisponiveis,
-          ufs: ufsDisponiveis,
-          tipos: tiposDisponiveis,
-          status: statusDisponiveis
-        }
-      });
+      const kpis = await getKpisRetiradas(where);
+      res.status(200).json(kpis);
     } catch (error) {
       next(error);
     }

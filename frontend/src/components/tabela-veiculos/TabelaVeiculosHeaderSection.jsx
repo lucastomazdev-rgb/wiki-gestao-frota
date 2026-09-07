@@ -17,6 +17,7 @@ import SearchableSelect from '../shared/SearchableSelect';
 
 export default function TabelaVeiculosHeaderSection({
   totalRegistros,
+  isLoading = false,
   unidadesDisponiveis,
   filtroUnidade,
   setFiltroUnidade,
@@ -67,7 +68,7 @@ export default function TabelaVeiculosHeaderSection({
             )}
           </h2>
           <p className="text-[11px] lg:text-xs text-slate-500 font-bold uppercase tracking-wider mt-1 opacity-70">
-            Total de <span className="text-teal-600">{totalRegistros}</span> veículos <span className="hidden sm:inline">em operação</span>
+            Total de <span className="text-teal-600 font-black">{isLoading ? <span className="inline-block w-8 h-3 bg-slate-200 animate-pulse rounded align-middle" /> : totalRegistros}</span> veículos <span className="hidden sm:inline">em operação</span>
           </p>
         </div>
 
@@ -145,21 +146,27 @@ export default function TabelaVeiculosHeaderSection({
         <div className="flex-1 flex items-center justify-center px-4 py-2.5 hover:bg-white rounded-lg transition-all duration-300 cursor-default border border-transparent hover:border-teal-500/40 hover:-translate-y-2 hover:scale-[1.03] group" title="Caminhões">
           <Truck size={16} className="text-teal-500 mr-3 group-hover:scale-110 transition-transform" />
           <div className="flex flex-col">
-            <span className="font-black text-slate-800 text-xs lg:text-sm leading-none group-hover:text-teal-600 transition-colors">{countCaminhoes}</span>
+            <span className="font-black text-slate-800 text-xs lg:text-sm leading-none group-hover:text-teal-600 transition-colors">
+              {isLoading ? <span className="inline-block w-6 h-3 bg-slate-200 animate-pulse rounded my-0.5" /> : countCaminhoes}
+            </span>
             <span className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-1 group-hover:text-teal-500/70 transition-colors">Pesados</span>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center px-4 py-2.5 hover:bg-white rounded-lg transition-all duration-300 cursor-default border border-transparent hover:border-emerald-500/40 hover:-translate-y-2 hover:scale-[1.03] group" title="Motos">
           <Bike size={16} className="text-emerald-500 mr-3 group-hover:scale-110 transition-transform" />
           <div className="flex flex-col">
-            <span className="font-black text-slate-800 text-xs lg:text-sm leading-none group-hover:text-emerald-600 transition-colors">{countMotos}</span>
+            <span className="font-black text-slate-800 text-xs lg:text-sm leading-none group-hover:text-emerald-600 transition-colors">
+              {isLoading ? <span className="inline-block w-6 h-3 bg-slate-200 animate-pulse rounded my-0.5" /> : countMotos}
+            </span>
             <span className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-1 group-hover:text-emerald-500/70 transition-colors">Motos</span>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center px-4 py-2.5 hover:bg-white rounded-lg transition-all duration-300 cursor-default border border-transparent hover:border-teal-500/40 hover:-translate-y-2 hover:scale-[1.03] group" title="Vídeo / Câmeras">
           <Video size={16} className="text-teal-500 mr-3 group-hover:scale-110 transition-transform" />
           <div className="flex flex-col">
-            <span className="font-black text-slate-800 text-xs lg:text-sm leading-none group-hover:text-teal-600 transition-colors">{countVideos}</span>
+            <span className="font-black text-slate-800 text-xs lg:text-sm leading-none group-hover:text-teal-600 transition-colors">
+              {isLoading ? <span className="inline-block w-6 h-3 bg-slate-200 animate-pulse rounded my-0.5" /> : countVideos}
+            </span>
             <span className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-1 group-hover:text-teal-500/70 transition-colors">Vídeo</span>
           </div>
         </div>

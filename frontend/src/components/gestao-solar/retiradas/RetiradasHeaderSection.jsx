@@ -20,6 +20,7 @@ export default function RetiradasHeaderSection({
   totalRegistros,
   volumeBaixas,
   receitaTaxas,
+  isLoading = false,
   unidadesDisponiveis,
   filtroUnidade,
   setFiltroUnidade,
@@ -66,7 +67,7 @@ export default function RetiradasHeaderSection({
             <span>Histórico de Retiradas</span>
           </h2>
           <p className="text-[11px] lg:text-xs text-slate-500 font-bold uppercase tracking-wider mt-1.5 opacity-75">
-            Total de <span className="text-orange-600 font-black">{volumeBaixas}</span> baixas registradas
+            Total de <span className="text-orange-600 font-black">{isLoading ? <span className="inline-block w-8 h-3 bg-slate-200 animate-pulse rounded align-middle" /> : volumeBaixas}</span> baixas registradas
           </p>
         </div>
 
@@ -103,7 +104,7 @@ export default function RetiradasHeaderSection({
               options={statusDisponiveis}
               value={filtroStatus}
               onChange={setFiltroStatus}
-              icon={ArrowDownRight}
+              icon={LogOut}
             />
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -112,9 +113,9 @@ export default function RetiradasHeaderSection({
               <input
                 type="text"
                 placeholder="Placa..."
-                className={`w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold uppercase rounded-xl pl-9 ${filtroPlaca ? 'pr-8' : 'pr-3'} py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all shadow-sm`}
+                className={`w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl pl-9 ${filtroPlaca ? 'pr-8' : 'pr-3'} py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all shadow-xs`}
                 value={filtroPlaca}
-                onChange={(event) => setFiltroPlaca(event.target.value)}
+                onChange={(e) => setFiltroPlaca(e.target.value)}
               />
               {filtroPlaca && (
                 <button
@@ -162,7 +163,7 @@ export default function RetiradasHeaderSection({
               <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest leading-none mb-1.5">Volume Filtrado</p>
               <div className="flex items-baseline gap-1.5 leading-none">
                 <span className="text-2xl font-black text-slate-800 tracking-tight">
-                  {totalRegistros}
+                  {isLoading ? <span className="inline-block w-12 h-6 bg-slate-200 animate-pulse rounded my-0.5" /> : totalRegistros}
                 </span>
                 <span className="text-[10px] font-black text-slate-400 uppercase">
                   veículos baixados
@@ -183,7 +184,7 @@ export default function RetiradasHeaderSection({
               <p className="text-orange-100 font-black uppercase tracking-widest text-[10px] mb-1.5 leading-none">Taxas de Desinstalação</p>
               <div className="flex items-baseline gap-2 leading-none">
                 <span className="text-2xl font-black tracking-tight drop-shadow-xs">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receitaTaxas)}
+                  {isLoading ? <span className="inline-block w-24 h-6 bg-white/20 animate-pulse rounded my-0.5" /> : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receitaTaxas)}
                 </span>
               </div>
             </div>
@@ -195,21 +196,27 @@ export default function RetiradasHeaderSection({
           <div className="flex-1 flex items-center justify-center px-3 py-2 hover:bg-white rounded-xl transition-all duration-300 group" title="Caminhões / Pesados">
             <Truck size={16} className="text-orange-500 mr-2.5 group-hover:scale-110 transition-transform" />
             <div className="flex flex-col">
-              <span className="font-black text-slate-800 text-sm leading-none group-hover:text-orange-600 transition-colors">{countCaminhoes}</span>
+              <span className="font-black text-slate-800 text-sm leading-none group-hover:text-orange-600 transition-colors">
+                {isLoading ? <span className="inline-block w-6 h-3 bg-slate-200 animate-pulse rounded my-0.5" /> : countCaminhoes}
+              </span>
               <span className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-1">Pesados</span>
             </div>
           </div>
           <div className="flex-1 flex items-center justify-center px-3 py-2 hover:bg-white rounded-xl transition-all duration-300 group" title="Motos">
             <Bike size={16} className="text-emerald-500 mr-2.5 group-hover:scale-110 transition-transform" />
             <div className="flex flex-col">
-              <span className="font-black text-slate-800 text-sm leading-none group-hover:text-emerald-600 transition-colors">{countMotos}</span>
+              <span className="font-black text-slate-800 text-sm leading-none group-hover:text-emerald-600 transition-colors">
+                {isLoading ? <span className="inline-block w-6 h-3 bg-slate-200 animate-pulse rounded my-0.5" /> : countMotos}
+              </span>
               <span className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-1">Motos</span>
             </div>
           </div>
           <div className="flex-1 flex items-center justify-center px-3 py-2 hover:bg-white rounded-xl transition-all duration-300 group" title="Vídeo / Câmeras">
             <Video size={16} className="text-teal-500 mr-2.5 group-hover:scale-110 transition-transform" />
             <div className="flex flex-col">
-              <span className="font-black text-slate-800 text-sm leading-none group-hover:text-teal-600 transition-colors">{countVideos}</span>
+              <span className="font-black text-slate-800 text-sm leading-none group-hover:text-teal-600 transition-colors">
+                {isLoading ? <span className="inline-block w-6 h-3 bg-slate-200 animate-pulse rounded my-0.5" /> : countVideos}
+              </span>
               <span className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-1">Vídeo</span>
             </div>
           </div>

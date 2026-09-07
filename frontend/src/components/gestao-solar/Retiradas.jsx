@@ -84,6 +84,7 @@ export default function Retiradas({ avisarMudanca } = {}) {
           totalRegistros={totalRegistros}
           volumeBaixas={volumeBaixas}
           receitaTaxas={receitaTaxas}
+          isLoading={isLoadingRetiradas && retiradas.length === 0}
           unidadesDisponiveis={unidadesDisponiveis}
           filtroUnidade={filtroUnidade}
           setFiltroUnidade={setFiltroUnidade}

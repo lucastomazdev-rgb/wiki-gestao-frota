@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
+import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +62,7 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 }
 
 app.disable('x-powered-by');
+app.use(compression());
 
 // 🛡️ Security Middleware - Helmet HTTP Headers
 app.use(helmet({

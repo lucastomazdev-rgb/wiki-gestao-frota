@@ -136,6 +136,7 @@ export default function TabelaVeiculos({ avisarMudanca }) {
         <div className="bg-white p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden animate-in fade-in duration-500">
           <TabelaVeiculosHeaderSection
             totalRegistros={totalRegistros}
+            isLoading={isLoadingVeiculos && veiculos.length === 0}
             unidadesDisponiveis={unidadesDisponiveis}
             filtroUnidade={filtroUnidade}
             setFiltroUnidade={setFiltroUnidade}
