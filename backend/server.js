@@ -13,11 +13,13 @@ import { fileURLToPath } from 'node:url';
 import {
   authenticateToken,
   createProtect,
+  invalidateSessionCache,
   JWT_AUDIENCE,
   JWT_ISSUER,
   readRequestToken,
   restrictTo
 } from './middleware/auth.js';
+import { recordAuditEvent } from './services/auditLogger.js';
 import createGestaoSolarRouter from './routes/gestaoSolar.js';
 import createTecnicosTerceirizadosRouter from './routes/tecnicosTerceirizados.js';
 
@@ -117,6 +119,21 @@ const authLimiter = rateLimit({
     message: 'Muitas tentativas de login/registro a partir deste IP. Por favor, tente novamente após 15 minutos.'
   }
 });
+
+// ⚡ Rate Limiting estrito para operações pesadas em massa (Sincronizações e Cargas de estoque)
+const heavyMutationLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Limite de operações de sincronização em massa atingido. Aguarde 1 minuto e tente novamente.'
+  }
+});
+app.use('/api/instalacoes/sync', heavyMutationLimiter);
+app.use('/api/retiradas/sync', heavyMutationLimiter);
+app.use('/api/gestao-solar/tecnicos/:id/equipamentos/carga', heavyMutationLimiter);
 
 // Middleware de CORS com validação estrita de origens
 const configuredClientUrls = process.env.CLIENT_URL
@@ -377,6 +394,12 @@ app.post('/api/auth/login', async (req, res, next) => {
 
     const passwordMatches = await bcrypt.compare(validatedData.password, user?.passwordHash || DUMMY_PASSWORD_HASH);
     if (!user || !passwordMatches) {
+      recordAuditEvent({
+        action: 'AUTH_LOGIN_FAILED',
+        details: { email: validatedData.email },
+        status: 'FAILED',
+        ip: req.ip
+      });
       return res.status(401).json({ status: 'error', message: 'E-mail ou senha incorretos.' });
     }
 
@@ -384,6 +407,12 @@ app.post('/api/auth/login', async (req, res, next) => {
 
     const token = signSessionToken(user);
     res.cookie('token', token, cookieOptions);
+
+    recordAuditEvent({
+      action: 'AUTH_LOGIN_SUCCESS',
+      performedBy: { id: user.id, email: user.email, role: user.role },
+      ip: req.ip
+    });
 
     res.status(200).json({
       status: 'success',
@@ -409,12 +438,18 @@ app.post('/api/auth/logout', protect, async (req, res, next) => {
       where: { id: req.user.id },
       data: { sessionVersion: { increment: 1 } }
     });
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    invalidateSessionCache(req.user.id);
+    recordAuditEvent({
+      action: 'AUTH_LOGOUT',
+      performedBy: req.user,
+      ip: req.ip
+    });
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       path: '/'
-  });
+    });
     res.status(200).json({ status: 'success', message: 'Logout realizado com sucesso.' });
   } catch (error) {
     next(error);
@@ -484,6 +519,14 @@ app.patch('/api/users/:id/gestao-solar', protect, restrictTo('ADMIN'), async (re
         role: true,
         can_access_gestao_solar: true
       }
+    });
+
+    invalidateSessionCache(id);
+    recordAuditEvent({
+      action: 'USER_GESTÃO_SOLAR_PERMISSION_CHANGE',
+      performedBy: req.user,
+      target: { type: 'User', id, can_access_gestao_solar },
+      ip: req.ip
     });
 
     res.status(200).json({ status: 'success', data: { user: updatedUser } });
@@ -576,6 +619,14 @@ app.put('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) =
       }
     });
 
+    invalidateSessionCache(id);
+    recordAuditEvent({
+      action: 'USER_UPDATE',
+      performedBy: req.user,
+      target: { type: 'User', id, fields: Object.keys(dataToUpdate) },
+      ip: req.ip
+    });
+
     res.status(200).json({ status: 'success', data: { user: updatedUser } });
   } catch (error) {
     next(error);
@@ -592,6 +643,13 @@ app.delete('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next
       return res.status(400).json({ status: 'error', message: 'Você não pode excluir sua própria conta enquanto estiver conectado.' });
     }
     await prisma.user.delete({ where: { id } });
+    invalidateSessionCache(id);
+    recordAuditEvent({
+      action: 'USER_DELETE',
+      performedBy: req.user,
+      target: { type: 'User', id },
+      ip: req.ip
+    });
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -705,6 +763,7 @@ app.get('/api/articles', protect, async (req, res, next) => {
         id: true,
         title: true,
         slug: true,
+        contentMarkdown: true,
         viewCount: true,
         categoryId: true,
         videoUrl: true,

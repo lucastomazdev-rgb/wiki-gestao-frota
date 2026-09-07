@@ -9,6 +9,7 @@ import {
   uploadPrivateFile,
   validateTutorialFile
 } from '../services/storage.js';
+import { recordAuditEvent } from '../services/auditLogger.js';
 
 const uploadMemory = multer({
   storage: multer.memoryStorage(),
@@ -294,7 +295,17 @@ export default function createGestaoSolarRouter(prisma, protect) {
   router.delete('/instalacoes/:id', async (req, res, next) => {
     try {
       const { id } = req.params;
+      const veiculo = await prisma.instalacoes.findUnique({
+        where: { id },
+        select: { placa: true, unidade_id: true }
+      });
       await prisma.instalacoes.delete({ where: { id } });
+      recordAuditEvent({
+        action: 'INSTALACAO_DELETE',
+        performedBy: req.user,
+        target: { type: 'instalacoes', id, placa: veiculo?.placa },
+        ip: req.ip
+      });
       res.status(200).json({ mensagem: 'Instalação deletada com sucesso!' });
     } catch (error) {
       next(error);
@@ -777,29 +788,37 @@ export default function createGestaoSolarRouter(prisma, protect) {
         }
       }
 
-      // Buscar opções únicas existentes na tabela retiradas para popular os filtros
-      const todasOpcoesRetiradas = await prisma.retiradas.findMany({
-        select: {
-          status: true,
-          unidades_clientes: {
-            select: { nome_unidade: true, uf: true }
-          },
-          modelos_rastreadores: {
-            select: { tipo_veiculo: true }
-          }
-        }
-      });
+      // Buscar opções únicas de forma agregada e eficiente sem carregar a tabela inteira
+      const [unidadesComRetirada, modelosComRetirada, statusDistintos] = await Promise.all([
+        prisma.unidades_clientes.findMany({
+          where: { retiradas: { some: {} } },
+          select: { nome_unidade: true, uf: true },
+          orderBy: { nome_unidade: 'asc' }
+        }),
+        prisma.modelos_rastreadores.findMany({
+          where: { retiradas: { some: {} } },
+          select: { tipo_veiculo: true },
+          distinct: ['tipo_veiculo'],
+          orderBy: { tipo_veiculo: 'asc' }
+        }),
+        prisma.retiradas.findMany({
+          where: { status: { not: null } },
+          select: { status: true },
+          distinct: ['status']
+        })
+      ]);
 
       // Se houver filtro de UF selecionado, refina a lista de unidades correspondentes
-      let unidadesBase = todasOpcoesRetiradas;
+      let unidadesBase = unidadesComRetirada;
       if (uf && uf.trim()) {
-        unidadesBase = unidadesBase.filter(r => (r.unidades_clientes?.uf || '').toUpperCase() === uf.trim().toUpperCase());
+        const ufUpper = uf.trim().toUpperCase();
+        unidadesBase = unidadesBase.filter(r => (r.uf || '').toUpperCase() === ufUpper);
       }
 
-      const unidadesDisponiveis = [...new Set(unidadesBase.map(r => r.unidades_clientes?.nome_unidade).filter(Boolean))].sort();
-      const ufsDisponiveis = [...new Set(todasOpcoesRetiradas.map(r => r.unidades_clientes?.uf).filter(Boolean))].sort();
-      const tiposDisponiveis = [...new Set(todasOpcoesRetiradas.map(r => r.modelos_rastreadores?.tipo_veiculo).filter(Boolean))].sort();
-      const statusDisponiveis = [...new Set(todasOpcoesRetiradas.map(r => r.status).filter(Boolean))].sort();
+      const unidadesDisponiveis = [...new Set(unidadesBase.map(r => r.nome_unidade).filter(Boolean))].sort();
+      const ufsDisponiveis = [...new Set(unidadesComRetirada.map(r => r.uf).filter(Boolean))].sort();
+      const tiposDisponiveis = [...new Set(modelosComRetirada.map(r => r.tipo_veiculo).filter(Boolean))].sort();
+      const statusDisponiveis = [...new Set(statusDistintos.map(r => r.status).filter(Boolean))].sort();
 
       res.status(200).json({
         total,
@@ -877,11 +896,21 @@ export default function createGestaoSolarRouter(prisma, protect) {
     }
   });
 
-  // Excluir registro de retirada
+  // Excluir retirada
   router.delete('/retiradas/:id', async (req, res, next) => {
     try {
       const { id } = req.params;
+      const retirada = await prisma.retiradas.findUnique({
+        where: { id },
+        select: { placa: true, status: true }
+      });
       await prisma.retiradas.delete({ where: { id } });
+      recordAuditEvent({
+        action: 'RETIRADA_DELETE',
+        performedBy: req.user,
+        target: { type: 'retiradas', id, placa: retirada?.placa },
+        ip: req.ip
+      });
       res.status(200).json({ mensagem: 'Registro de retirada excluído com sucesso.' });
     } catch (error) {
       next(error);

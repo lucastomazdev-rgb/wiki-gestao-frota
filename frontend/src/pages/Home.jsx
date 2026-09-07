@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import CategoryCard from '../components/CategoryCard';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { Search, AlertCircle, FileText, ChevronRight, Eye, RefreshCw, Layers, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
-import gsap from 'gsap';
 
 export default function Home({ 
   onSelectArticle, 
@@ -21,8 +20,6 @@ export default function Home({
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const toast = useToast();
-  
-  const cardsRef = useRef([]);
 
   const fetchData = async (isManualSync = false) => {
     setLoading(true);
@@ -56,25 +53,6 @@ export default function Home({
   }, []);
 
 
-  // GSAP Entrance Stagger with null-check safeguard and cleanup
-  useEffect(() => {
-    const validCards = (cardsRef.current || []).filter(el => el !== null && el !== undefined);
-    if (!loading && validCards.length > 0 && !selectedCategoryId && !searchQuery) {
-      const anim = gsap.fromTo(
-        validCards,
-        { opacity: 0, y: 15 },
-        { 
-          opacity: 1, 
-          y: 0, 
-          stagger: 0.06, 
-          duration: 0.35, 
-          ease: 'power2.out',
-          overwrite: 'auto'
-        }
-      );
-      return () => anim.kill();
-    }
-  }, [loading, categories, selectedCategoryId, searchQuery]);
 
   // Handle external redirect from top search trigger
   useEffect(() => {
@@ -248,17 +226,34 @@ export default function Home({
                 </h2>
                 <span className="text-xs text-slate-400 font-sans bg-white/5 border border-white/10 px-3 py-1 rounded-full">{categories.length} Categorias</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {categories.map((cat, idx) => (
-                  <div key={cat.id} ref={el => cardsRef.current[idx] = el} className="opacity-0">
+              <motion.div 
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: { opacity: 0 },
+                  visible: {
+                    opacity: 1,
+                    transition: { staggerChildren: 0.06 }
+                  }
+                }}
+              >
+                {categories.map((cat) => (
+                  <motion.div
+                    key={cat.id}
+                    variants={{
+                      hidden: { opacity: 0, y: 12 },
+                      visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } }
+                    }}
+                  >
                     <CategoryCard
                       category={cat}
                       count={getCategoryArticleCount(cat.id)}
                       onClick={() => setSelectedCategoryId(cat.id)}
                     />
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
             </div>
           )}
 

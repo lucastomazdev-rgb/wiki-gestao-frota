@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import toast, { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth, api } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import ToastContainer from './components/ui/ToastContainer';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Footer from './components/Footer';
@@ -41,26 +40,118 @@ const queryClient = new QueryClient({
   }
 });
 
+function parseHash(hash, canAccessSolar) {
+  const cleanHash = (hash || '').replace(/^#\/?/, '');
+  const parts = cleanHash.split('/').filter(Boolean);
+
+  if (parts[0] === 'solar') {
+    if (!canAccessSolar) {
+      return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
+    }
+    const validSolarTabs = ['veiculos', 'retiradas', 'tecnicos', 'tutoriais'];
+    const solarTab = validSolarTabs.includes(parts[1]) ? parts[1] : 'veiculos';
+    return { platformMode: 'gestao_solar', currentTab: 'home', articleSlug: null, solarTab };
+  }
+
+  if (parts[0] === 'wiki') {
+    if (parts[1] === 'artigo' && parts[2]) {
+      return {
+        platformMode: 'wiki',
+        currentTab: 'article-detail',
+        articleSlug: decodeURIComponent(parts.slice(2).join('/')),
+        solarTab: 'veiculos'
+      };
+    }
+    if (parts[1] === 'downloads') {
+      return { platformMode: 'wiki', currentTab: 'downloads', articleSlug: null, solarTab: 'veiculos' };
+    }
+    if (parts[1] === 'admin') {
+      return { platformMode: 'wiki', currentTab: 'admin', articleSlug: null, solarTab: 'veiculos' };
+    }
+    return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
+  }
+
+  return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
+}
+
+function buildHash(platformMode, currentTab, selectedArticleSlug, currentSolarTab) {
+  if (platformMode === 'gestao_solar') {
+    return `#/solar/${currentSolarTab || 'veiculos'}`;
+  }
+  if (currentTab === 'article-detail' && selectedArticleSlug) {
+    return `#/wiki/artigo/${encodeURIComponent(selectedArticleSlug)}`;
+  }
+  if (currentTab === 'downloads') {
+    return `#/wiki/downloads`;
+  }
+  if (currentTab === 'admin') {
+    return `#/wiki/admin`;
+  }
+  return `#/wiki`;
+}
+
+const AppToaster = () => (
+  <Toaster
+    position="top-right"
+    toastOptions={{
+      duration: 4500,
+      style: {
+        background: 'rgba(15, 23, 42, 0.96)',
+        color: '#f8fafc',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+        borderRadius: '16px',
+        fontSize: '13px',
+        fontWeight: '600',
+        padding: '12px 16px',
+      },
+      success: {
+        iconTheme: {
+          primary: '#10b981',
+          secondary: '#0f172a',
+        },
+        style: {
+          border: '1px solid rgba(16, 185, 129, 0.35)',
+        },
+      },
+      error: {
+        duration: 6000,
+        iconTheme: {
+          primary: '#f43f5e',
+          secondary: '#0f172a',
+        },
+        style: {
+          border: '1px solid rgba(244, 63, 94, 0.35)',
+        },
+      },
+    }}
+  />
+);
+
 function AppContent() {
+
   const { user, loading } = useAuth();
   
+  const canAccessSolar = user?.role === 'ADMIN' || Boolean(user?.can_access_gestao_solar);
+
+  const initialNav = parseHash(typeof window !== 'undefined' ? window.location.hash : '', false);
+
   // Platform Mode: 'wiki' | 'gestao_solar'
-  const [platformMode, setPlatformMode] = useState('wiki');
+  const [platformMode, setPlatformMode] = useState(initialNav.platformMode);
 
   // Gestão Solar state
-  const [currentSolarTab, setCurrentSolarTab] = useState('veiculos');
+  const [currentSolarTab, setCurrentSolarTab] = useState(initialNav.solarTab || 'veiculos');
   const [mobileSolarSidebarOpen, setMobileSolarSidebarOpen] = useState(false);
 
   // Wiki Navigation State: 'home' | 'search' | 'downloads' | 'admin' | 'article-detail'
-  const [currentTab, setCurrentTab] = useState('home');
-  const [selectedArticleSlug, setSelectedArticleSlug] = useState(null);
+  const [currentTab, setCurrentTab] = useState(initialNav.currentTab || 'home');
+  const [selectedArticleSlug, setSelectedArticleSlug] = useState(initialNav.articleSlug || null);
   const [selectedArticleTitle, setSelectedArticleTitle] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [categories, setCategories] = useState([]);
-
-  const canAccessSolar = user?.role === 'ADMIN' || Boolean(user?.can_access_gestao_solar);
 
   const fetchCategories = () => {
     if (user) {
@@ -81,6 +172,46 @@ function AppContent() {
       setPlatformMode('wiki');
     }
   }, [canAccessSolar, platformMode]);
+
+  // Sincronização inicial e listener do hash (navegação via URL direta, links e botões Voltar/Avançar)
+  useEffect(() => {
+    if (!user) return;
+
+    if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '#') {
+      const parsed = parseHash(window.location.hash, canAccessSolar);
+      setPlatformMode((prev) => (prev !== parsed.platformMode ? parsed.platformMode : prev));
+      setCurrentTab((prev) => (prev !== parsed.currentTab ? parsed.currentTab : prev));
+      setSelectedArticleSlug((prev) => (prev !== parsed.articleSlug ? parsed.articleSlug : prev));
+      if (parsed.solarTab) {
+        setCurrentSolarTab((prev) => (prev !== parsed.solarTab ? parsed.solarTab : prev));
+      }
+    } else {
+      window.location.hash = buildHash(platformMode, currentTab, selectedArticleSlug, currentSolarTab);
+    }
+
+    const handleHashChange = () => {
+      const parsed = parseHash(window.location.hash, canAccessSolar);
+      setPlatformMode((prev) => (prev !== parsed.platformMode ? parsed.platformMode : prev));
+      setCurrentTab((prev) => (prev !== parsed.currentTab ? parsed.currentTab : prev));
+      setSelectedArticleSlug((prev) => (prev !== parsed.articleSlug ? parsed.articleSlug : prev));
+      if (parsed.solarTab) {
+        setCurrentSolarTab((prev) => (prev !== parsed.solarTab ? parsed.solarTab : prev));
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [user, canAccessSolar]);
+
+  // Atualiza a URL hash no histórico sempre que o estado interno mudar
+  useEffect(() => {
+    if (!user) return;
+    const targetHash = buildHash(platformMode, currentTab, selectedArticleSlug, currentSolarTab);
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash;
+    }
+  }, [platformMode, currentTab, selectedArticleSlug, currentSolarTab, user]);
+
 
   // Technical PDF manuals data for downloads tab
   const technicalFiles = [
@@ -235,8 +366,7 @@ function AppContent() {
           </main>
         </div>
 
-        <Toaster position="top-right" />
-        <ToastContainer />
+        <AppToaster />
       </div>
     );
   }
@@ -405,8 +535,7 @@ function AppContent() {
       <Footer currentTab={currentTab === 'article-detail' ? 'home' : currentTab} setCurrentTab={handleTabChange} />
 
       {/* Global Toast Container */}
-      <Toaster position="top-right" />
-      <ToastContainer />
+      <AppToaster />
     </div>
   );
 }

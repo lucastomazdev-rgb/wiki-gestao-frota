@@ -17,6 +17,17 @@ export const readRequestToken = (req) => {
   return null;
 };
 
+const CACHE_TTL_MS = 30 * 1000;
+const sessionCache = new Map();
+
+export const invalidateSessionCache = (userId) => {
+  if (userId) {
+    sessionCache.delete(userId);
+  } else {
+    sessionCache.clear();
+  }
+};
+
 export const authenticateToken = async (prisma, token) => {
   const secret = getJwtSecret();
   if (!secret) throw new Error('JWT_SECRET não está configurado.');
@@ -29,20 +40,34 @@ export const authenticateToken = async (prisma, token) => {
 
   if (!decoded.sub) throw new Error('Token sem identificador de usuário.');
 
-  const user = await prisma.user.findUnique({
-    where: { id: decoded.sub },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      can_access_gestao_solar: true,
-      sessionVersion: true
-    }
-  });
+  const now = Date.now();
+  const cached = sessionCache.get(decoded.sub);
+  let user;
 
-  if (!user || user.sessionVersion !== decoded.sessionVersion) {
-    throw new Error('Sessão revogada.');
+  if (cached && cached.expiresAt > now && cached.user.sessionVersion === decoded.sessionVersion) {
+    user = cached.user;
+  } else {
+    user = await prisma.user.findUnique({
+      where: { id: decoded.sub },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        can_access_gestao_solar: true,
+        sessionVersion: true
+      }
+    });
+
+    if (!user || user.sessionVersion !== decoded.sessionVersion) {
+      sessionCache.delete(decoded.sub);
+      throw new Error('Sessão revogada.');
+    }
+
+    sessionCache.set(decoded.sub, {
+      user,
+      expiresAt: now + CACHE_TTL_MS
+    });
   }
 
   return {

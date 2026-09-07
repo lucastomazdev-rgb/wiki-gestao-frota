@@ -10,7 +10,8 @@ import {
   Search,
   Truck,
   Upload,
-  Video
+  Video,
+  X
 } from 'lucide-react';
 import SearchableSelect from '../shared/SearchableSelect';
 
@@ -39,6 +40,15 @@ export default function TabelaVeiculosHeaderSection({
   onExportarExcel,
   onOpenTimeline
 }) {
+  const activeFiltersCount = [filtroUnidade, filtroUF, filtroTipo, filtroPlaca].filter(Boolean).length;
+
+  const handleClearFilters = () => {
+    setFiltroUnidade('');
+    setFiltroUF('');
+    setFiltroTipo('');
+    setFiltroPlaca('');
+  };
+
   return (
     <>
       <div className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center mb-6 gap-6">
@@ -61,43 +71,73 @@ export default function TabelaVeiculosHeaderSection({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-50/40 p-2 lg:p-3 rounded-2xl border border-slate-200/50 w-full 2xl:w-auto">
-          <SearchableSelect
-            label="Unidade"
-            placeholder="Unidade..."
-            options={unidadesDisponiveis}
-            value={filtroUnidade}
-            onChange={setFiltroUnidade}
-            icon={Layers}
-          />
-          <SearchableSelect
-            label="UF"
-            placeholder="UF..."
-            options={ufsDisponiveis}
-            value={filtroUF}
-            onChange={setFiltroUF}
-            icon={Filter}
-          />
-          <SearchableSelect
-            label="Tipo"
-            placeholder="Tipo..."
-            options={tiposDisponiveis}
-            value={filtroTipo}
-            onChange={setFiltroTipo}
-            icon={Truck}
-          />
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={14} className="text-slate-400 group-focus-within:text-teal-500 transition-colors" />
-            </div>
-            <input
-              type="text"
-              placeholder="Placa..."
-              className="w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl pl-9 pr-3 py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
-              value={filtroPlaca}
-              onChange={(event) => setFiltroPlaca(event.target.value)}
+        <div className="flex flex-col gap-2 w-full 2xl:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-50/40 p-2 lg:p-3 rounded-2xl border border-slate-200/50 w-full 2xl:w-auto">
+            <SearchableSelect
+              label="Unidade"
+              placeholder="Unidade..."
+              options={unidadesDisponiveis}
+              value={filtroUnidade}
+              onChange={setFiltroUnidade}
+              icon={Layers}
             />
+            <SearchableSelect
+              label="UF"
+              placeholder="UF..."
+              options={ufsDisponiveis}
+              value={filtroUF}
+              onChange={setFiltroUF}
+              icon={Filter}
+            />
+            <SearchableSelect
+              label="Tipo"
+              placeholder="Tipo..."
+              options={tiposDisponiveis}
+              value={filtroTipo}
+              onChange={setFiltroTipo}
+              icon={Truck}
+            />
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={14} className="text-slate-400 group-focus-within:text-teal-500 transition-colors" />
+              </div>
+              <input
+                type="text"
+                placeholder="Placa..."
+                className={`w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl pl-9 ${filtroPlaca ? 'pr-8' : 'pr-3'} py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm`}
+                value={filtroPlaca}
+                onChange={(event) => setFiltroPlaca(event.target.value)}
+              />
+              {filtroPlaca && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroPlaca('')}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  title="Limpar filtro de placa"
+                  aria-label="Limpar filtro de placa"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
+
+          {activeFiltersCount > 0 && (
+            <div className="flex items-center justify-end px-1 animate-in fade-in duration-200">
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 hover:text-rose-800 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer group"
+                title="Limpar todos os filtros ativos"
+              >
+                <X size={13} className="group-hover:rotate-90 transition-transform duration-200" />
+                <span>Limpar filtros</span>
+                <span className="ml-1 px-1.5 py-0.2 bg-rose-200 text-rose-800 rounded-full text-[10px] font-black">
+                  {activeFiltersCount}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

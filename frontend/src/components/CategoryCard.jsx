@@ -1,10 +1,32 @@
 import React from 'react';
-import * as Icons from 'lucide-react';
+import {
+  BookOpen,
+  Shield,
+  Cpu,
+  Wrench,
+  FileText,
+  AlertTriangle,
+  TrendingUp,
+  Download,
+  FolderOpen
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 
+const ICON_MAP = {
+  BookOpen,
+  Shield,
+  Cpu,
+  Wrench,
+  FileText,
+  AlertTriangle,
+  TrendingUp,
+  Download,
+  FolderOpen
+};
+
 export default function CategoryCard({ category, onClick, count = 0 }) {
-  // Dynamically resolve icon from name
-  const IconComponent = Icons[category.iconName] || Icons.BookOpen;
+  // Dynamically resolve icon from mapped dictionary with fallback
+  const IconComponent = ICON_MAP[category.iconName] || BookOpen;
 
   return (
     <motion.div

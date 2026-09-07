@@ -1,63 +1,47 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
+import hotToast from 'react-hot-toast';
 
 const ToastContext = createContext(null);
 
 export function ToastProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
-
-  const removeToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const addToast = useCallback((toastData) => {
-    const id = Date.now() + Math.random().toString(36).substring(2, 9);
-    const duration = toastData.duration || 4500;
-
-    const newToast = {
-      id,
-      type: toastData.type || 'info', // 'success' | 'error' | 'info' | 'update' | 'undo'
-      title: toastData.title,
-      message: toastData.message,
-      duration,
-      onUndo: toastData.onUndo,
-      onConfirm: toastData.onConfirm,
-      actionText: toastData.actionText || 'Desfazer',
-    };
-
-    setToasts((prev) => [...prev, newToast]);
-
-    if (duration > 0) {
-      const timer = setTimeout(() => {
-        if (newToast.type === 'undo' && newToast.onConfirm) {
-          newToast.onConfirm();
-        }
-        removeToast(id);
-      }, duration);
-
-      newToast._timer = timer;
-    }
-
-    return id;
-  }, [removeToast]);
-
-  const handleUndo = useCallback((toast) => {
-    if (toast._timer) clearTimeout(toast._timer);
-    if (toast.onUndo) toast.onUndo();
-    removeToast(toast.id);
-  }, [removeToast]);
-
-  const toast = {
-    success: (message, title = 'Sucesso!') => addToast({ type: 'success', title, message }),
-    error: (message, title = 'Ocorreu um erro') => addToast({ type: 'error', title, message, duration: 6000 }),
-    info: (message, title = 'Informação') => addToast({ type: 'info', title, message }),
-    update: (message, title = 'Atualizado') => addToast({ type: 'update', title, message }),
-    undo: (message, { onUndo, onConfirm, duration = 5000, title = 'Item removido' }) => 
-      addToast({ type: 'undo', title, message, onUndo, onConfirm, duration }),
-    remove: removeToast,
+  const toastWrapper = {
+    success: (message, title) => {
+      return hotToast.success(title ? `${title}: ${message}` : message);
+    },
+    error: (message, title) => {
+      return hotToast.error(title ? `${title}: ${message}` : message, { duration: 6000 });
+    },
+    info: (message, title) => {
+      return hotToast(title ? `${title}: ${message}` : message, {
+        icon: 'ℹ️',
+      });
+    },
+    update: (message, title) => {
+      return hotToast.success(title ? `${title}: ${message}` : message);
+    },
+    undo: (message, { onUndo, onConfirm, duration = 5000, title } = {}) => {
+      return hotToast((t) => (
+        <span className="flex items-center gap-3 text-xs font-sans">
+          <span>{title ? `${title}: ${message}` : message}</span>
+          {onUndo && (
+            <button
+              onClick={() => {
+                hotToast.dismiss(t.id);
+                onUndo();
+              }}
+              className="px-2.5 py-1 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 rounded-lg font-bold text-xs border border-amber-500/40 transition-colors cursor-pointer"
+            >
+              Desfazer
+            </button>
+          )}
+        </span>
+      ), { duration });
+    },
+    remove: (id) => hotToast.dismiss(id),
   };
 
   return (
-    <ToastContext.Provider value={{ toasts, toast, removeToast, handleUndo }}>
+    <ToastContext.Provider value={{ toast: toastWrapper, toasts: [], removeToast: toastWrapper.remove, handleUndo: () => {} }}>
       {children}
     </ToastContext.Provider>
   );
@@ -78,3 +62,4 @@ export function useToastState() {
   }
   return context;
 }
+
