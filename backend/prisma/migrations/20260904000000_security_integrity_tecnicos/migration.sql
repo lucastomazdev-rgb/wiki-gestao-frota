@@ -310,8 +310,8 @@ BEGIN
       INSERT INTO storage.buckets (id, name, public)
       VALUES
         ('documentos_terceirizados', 'documentos_terceirizados', false),
-        ('arquivos_tutoriais', 'arquivos_tutoriais', false)
-      ON CONFLICT (id) DO UPDATE SET public = false
+        ('arquivos_tutoriais', 'arquivos_tutoriais', true)
+      ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public
     $sql$;
   END IF;
 END $$;

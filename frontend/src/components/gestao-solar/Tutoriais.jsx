@@ -96,6 +96,8 @@ export default function Tutoriais() {
     }
   };
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   // Download logic
   const handleDownloadRequest = (tipo, destino, arquivo) => {
     if (!arquivo || !arquivo.url) {
@@ -104,12 +106,62 @@ export default function Tutoriais() {
     setConfirmDownload({ tipo, destino, arquivo });
   };
 
-  const executeDownload = () => {
-    if (confirmDownload?.arquivo?.url) {
-      window.open(confirmDownload.arquivo.url, '_blank');
-      toast.success('Download iniciado!');
+  const executeDownload = async () => {
+    if (!confirmDownload?.arquivo) return;
+    const { type, identifier, nome } = confirmDownload.arquivo;
+    setIsDownloading(true);
+    const toastId = toast.loading('Preparando arquivo...');
+
+    try {
+      // 1. Obter a URL de download pelo backend
+      const res = await api.get('/tutoriais/download-url', {
+        params: { type, identifier }
+      });
+      const downloadUrl = res.data?.data?.url;
+      const downloadFilename = res.data?.data?.nome || nome || 'arquivo';
+
+      if (!downloadUrl) {
+        throw new Error('Link de download não disponível no momento.');
+      }
+
+      // 2. Baixar como Blob e disparar download direto para salvar na pasta Downloads
+      let downloadedViaBlob = false;
+      try {
+        const fileResponse = await fetch(downloadUrl);
+        if (fileResponse.ok) {
+          const blob = await fileResponse.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = downloadFilename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+          downloadedViaBlob = true;
+        }
+      } catch (fetchErr) {
+        console.warn('Download direto via blob falhou, tentando fallback por link:', fetchErr);
+      }
+
+      // Fallback se o fetch do blob foi bloqueado
+      if (!downloadedViaBlob) {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = downloadFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      toast.success('Download concluído!', { id: toastId });
+      setConfirmDownload(null);
+    } catch (err) {
+      console.error('Erro ao baixar arquivo:', err);
+      toast.error(err.response?.data?.message || err.message || 'Erro ao realizar download.', { id: toastId });
+    } finally {
+      setIsDownloading(false);
     }
-    setConfirmDownload(null);
   };
 
   return (
@@ -224,8 +276,9 @@ export default function Tutoriais() {
 
       <ModalDownload 
         confirmDownload={confirmDownload} 
-        onClose={() => setConfirmDownload(null)} 
+        onClose={() => !isDownloading && setConfirmDownload(null)} 
         onConfirm={executeDownload} 
+        isDownloading={isDownloading}
       />
 
       <ConfirmModal 

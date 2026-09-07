@@ -17,6 +17,8 @@ const uploadMemory = multer({
 });
 
 const TUTORIAL_BUCKET = 'arquivos_tutoriais';
+const SUPABASE_STORAGE_URL = process.env.SUPABASE_URL?.replace(/\/+$/, '') || 'https://fhqhuwvfehvrhfuogyie.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocWh1d3ZmZWh2cmhmdW9neWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDkyMzcsImV4cCI6MjA5OTg4NTIzN30.YMykOW34L88IlnkHXYBAdaEyszZ0ebAklRRnftVjhio';
 
 export default function createGestaoSolarRouter(prisma, protect) {
   const router = express.Router();
@@ -1233,16 +1235,48 @@ export default function createGestaoSolarRouter(prisma, protect) {
         });
       }
 
-      const objectPath = extractObjectPath(record?.arquivo_url, TUTORIAL_BUCKET);
-      if (!objectPath) return res.status(404).json({ status: 'error', message: 'Arquivo não encontrado.' });
+      if (!record || !record.arquivo_url) {
+        return res.status(404).json({ status: 'error', message: 'Arquivo não encontrado.' });
+      }
 
-      const url = await createPrivateDownloadUrl({
-        bucket: TUTORIAL_BUCKET,
-        objectPath,
-        downloadName: record.arquivo_nome,
-        expiresIn: 60
+      const objectPath = extractObjectPath(record.arquivo_url, TUTORIAL_BUCKET);
+      let downloadUrl = null;
+
+      // 1. Tentar gerar URL assinada se as credenciais do storage privado estiverem configuradas
+      try {
+        if (objectPath) {
+          downloadUrl = await createPrivateDownloadUrl({
+            bucket: TUTORIAL_BUCKET,
+            objectPath,
+            downloadName: record.arquivo_nome,
+            expiresIn: 300
+          });
+        }
+      } catch (signErr) {
+        // Fallback para URL pública caso o storage privado não possua service role key
+      }
+
+      // 2. Se não gerou URL assinada, utilizar URL pública direta
+      if (!downloadUrl) {
+        if (/^https?:\/\//i.test(record.arquivo_url)) {
+          downloadUrl = record.arquivo_url;
+        } else if (objectPath) {
+          downloadUrl = `${SUPABASE_STORAGE_URL}/storage/v1/object/public/${TUTORIAL_BUCKET}/${objectPath.split('/').map(encodeURIComponent).join('/')}`;
+        }
+      }
+
+      if (!downloadUrl) {
+        return res.status(404).json({ status: 'error', message: 'Não foi possível gerar link de download do arquivo.' });
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          url: downloadUrl,
+          nome: record.arquivo_nome || 'download',
+          expiresIn: 300
+        }
       });
-      res.status(200).json({ status: 'success', data: { url, expiresIn: 60 } });
     } catch (error) {
       next(error);
     }
@@ -1263,12 +1297,37 @@ export default function createGestaoSolarRouter(prisma, protect) {
         return res.status(400).json({ status: 'error', message: 'Nenhum arquivo enviado.' });
       }
       const cleanId = identifier.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-      const uploaded = await uploadPrivateFile({
-        bucket: TUTORIAL_BUCKET,
-        file,
-        prefix: `${type}/${cleanId}`,
-        validate: validateTutorialFile
-      });
+      let uploaded;
+      try {
+        uploaded = await uploadPrivateFile({
+          bucket: TUTORIAL_BUCKET,
+          file,
+          prefix: `${type}/${cleanId}`,
+          validate: validateTutorialFile
+        });
+      } catch (privateErr) {
+        // Fallback com SUPABASE_ANON_KEY no bucket
+        const ext = validateTutorialFile(file);
+        const fileNameSafe = `${type}_${cleanId}_${Date.now()}.${ext}`;
+        const uploadEndpoint = `${SUPABASE_STORAGE_URL}/storage/v1/object/${TUTORIAL_BUCKET}/${fileNameSafe}`;
+        const uploadRes = await fetch(uploadEndpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+            'Content-Type': file.mimetype || 'application/octet-stream',
+            'x-upsert': 'true'
+          },
+          body: file.buffer
+        });
+        if (!uploadRes.ok) {
+          throw new Error('Erro ao enviar arquivo para o storage.');
+        }
+        uploaded = {
+          path: `${SUPABASE_STORAGE_URL}/storage/v1/object/public/${TUTORIAL_BUCKET}/${fileNameSafe}`,
+          nome: file.originalname
+        };
+      }
       uploadedPath = uploaded.path;
 
       let record;

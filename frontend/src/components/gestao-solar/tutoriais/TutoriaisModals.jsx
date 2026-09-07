@@ -71,12 +71,12 @@ export function ModalEquipamento({ isOpen, onClose, editingItem, formData, setFo
   );
 }
 
-export function ModalDownload({ confirmDownload, onClose, onConfirm }) {
+export function ModalDownload({ confirmDownload, onClose, onConfirm, isDownloading = false }) {
   if (!confirmDownload) return null;
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-download-title">
-      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md" onClick={!isDownloading ? onClose : undefined}></div>
       <div className="bg-white w-full max-w-md rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.3)] relative z-20 animate-in zoom-in-95 duration-200 overflow-hidden border border-slate-100 text-center p-8">
         <div className={`mx-auto w-20 h-20 border-2 rounded-full flex items-center justify-center mb-6 relative ${confirmDownload.tipo === 'Script' ? 'bg-teal-50 border-teal-100 text-teal-500' : 'bg-rose-50 border-rose-100 text-rose-500'}`}>
           {confirmDownload.tipo === 'Script' ? <FileCode size={36} /> : <Database size={36} />}
@@ -84,8 +84,27 @@ export function ModalDownload({ confirmDownload, onClose, onConfirm }) {
         <h3 id="modal-download-title" className="text-xl font-extrabold text-slate-800 tracking-tight leading-tight mb-3">Download {confirmDownload.tipo}</h3>
         <p className="text-sm font-medium text-slate-500 mb-8 leading-relaxed">Você está prestes a baixar o arquivo configurado para:<br/><span className="text-slate-800 font-bold">{confirmDownload.destino}</span></p>
         <div className="space-y-3">
-          <button onClick={onConfirm} className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${confirmDownload.tipo === 'Script' ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-teal-500/30' : 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-500/30'} shadow-lg`}>Baixar Agora</button>
-          <button onClick={onClose} className="w-full py-4 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors">Voltar</button>
+          <button 
+            onClick={onConfirm} 
+            disabled={isDownloading}
+            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${confirmDownload.tipo === 'Script' ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-teal-500/30' : 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-500/30'} shadow-lg disabled:opacity-60 disabled:cursor-not-allowed`}
+          >
+            {isDownloading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Baixando...</span>
+              </>
+            ) : (
+              <span>Baixar Agora</span>
+            )}
+          </button>
+          <button 
+            onClick={onClose} 
+            disabled={isDownloading}
+            className="w-full py-4 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors disabled:opacity-50"
+          >
+            Voltar
+          </button>
         </div>
       </div>
     </div>
