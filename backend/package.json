@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "build": "prisma generate && prisma migrate deploy",
+    "build": "npm install && prisma generate && prisma migrate deploy",
+    "postinstall": "prisma generate",
     "dev": "node --watch server.js",
     "test": "node --test",
     "prisma:generate": "prisma generate",
