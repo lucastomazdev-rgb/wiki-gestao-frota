@@ -9,14 +9,17 @@ datasource db {
 }
 
 model User {
-  id                      String   @id @default(uuid())
-  email                   String   @unique
+  id                      String               @id @default(uuid())
+  email                   String               @unique
   passwordHash            String
   name                    String
-  role                    Role     @default(USER)
-  createdAt               DateTime @default(now())
-  can_access_gestao_solar Boolean? @default(false)
-  sessionVersion          Int      @default(0)
+  role                    Role                 @default(USER)
+  createdAt               DateTime             @default(now())
+  can_access_gestao_solar Boolean?             @default(false)
+  sessionVersion          Int                  @default(0)
+  tarefas_criadas         tarefas[]            @relation("TarefasCriadas")
+  tarefas_atribuidas      tarefas[]            @relation("TarefasAtribuidas")
+  comentarios_tarefas     tarefa_comentarios[]
 }
 
 model Category {
@@ -255,3 +258,38 @@ model ordens_servicos_terceirizados {
   @@index([placa], map: "idx_os_placa")
   @@index([status], map: "idx_os_status")
 }
+
+model tarefas {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  titulo      String               @db.VarChar(255)
+  descricao   String?              @db.Text
+  status      String               @default("Demandas") @db.VarChar(50)
+  criado_por  String               @db.Text
+  atribuido_a String?              @db.Text
+  ordem       Int                  @default(0)
+  prioridade  String               @default("Normal") @db.VarChar(30)
+  created_at  DateTime             @default(now()) @db.Timestamptz(6)
+
+  criador     User                 @relation("TarefasCriadas", fields: [criado_por], references: [id], onDelete: Restrict)
+  responsavel User?                @relation("TarefasAtribuidas", fields: [atribuido_a], references: [id], onDelete: SetNull)
+  comentarios tarefa_comentarios[]
+
+  @@index([criado_por], map: "idx_tarefas_criado_por")
+  @@index([atribuido_a], map: "idx_tarefas_atribuido_a")
+  @@index([status], map: "idx_tarefas_status")
+}
+
+model tarefa_comentarios {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tarefa_id  String   @db.Uuid
+  usuario_id String   @db.Text
+  comentario String   @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  tarefa  tarefas @relation(fields: [tarefa_id], references: [id], onDelete: Cascade)
+  usuario User    @relation(fields: [usuario_id], references: [id], onDelete: Restrict)
+
+  @@index([tarefa_id], map: "idx_comentarios_tarefa_id")
+  @@index([usuario_id], map: "idx_comentarios_usuario_id")
+}
+

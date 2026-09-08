@@ -30,6 +30,7 @@ const TabelaVeiculos = lazy(() => import('./components/TabelaVeiculos'));
 const Retiradas = lazy(() => import('./components/gestao-solar/Retiradas'));
 const Tutoriais = lazy(() => import('./components/gestao-solar/Tutoriais'));
 const GestaoTecnicosTerceirizados = lazy(() => import('./components/gestao-solar/tecnicos/GestaoTecnicosTerceirizados'));
+const Tarefas = lazy(() => import('./components/gestao-solar/Tarefas'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,7 +49,7 @@ function parseHash(hash, canAccessSolar) {
     if (!canAccessSolar) {
       return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
     }
-    const validSolarTabs = ['veiculos', 'retiradas', 'tecnicos', 'tutoriais'];
+    const validSolarTabs = ['veiculos', 'tarefas', 'retiradas', 'tecnicos', 'tutoriais'];
     const solarTab = validSolarTabs.includes(parts[1]) ? parts[1] : 'veiculos';
     return { platformMode: 'gestao_solar', currentTab: 'home', articleSlug: null, solarTab };
   }
@@ -93,9 +94,13 @@ function buildHash(platformMode, currentTab, selectedArticleSlug, currentSolarTa
 const AppToaster = () => (
   <Toaster
     position="top-right"
+    containerStyle={{
+      zIndex: 99999
+    }}
     toastOptions={{
       duration: 4500,
       style: {
+        zIndex: 99999,
         background: 'rgba(15, 23, 42, 0.96)',
         color: '#f8fafc',
         backdropFilter: 'blur(12px)',
@@ -328,7 +333,11 @@ function AppContent() {
                 </span>
                 <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-400" />
                 <span className="font-extrabold text-slate-900 truncate">
-                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : (currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : (currentSolarTab === 'tecnicos' ? 'Técnicos & Serviços Terceirizados' : (currentSolarTab === 'tutoriais' ? 'Tutoriais & Conhecimentos Gerais' : currentSolarTab)))}
+                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : 
+                   currentSolarTab === 'tarefas' ? 'Quadro de Tarefas & Demandas' :
+                   currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : 
+                   currentSolarTab === 'tecnicos' ? 'Técnicos & Serviços Terceirizados' : 
+                   currentSolarTab === 'tutoriais' ? 'Tutoriais & Conhecimentos Gerais' : currentSolarTab}
                 </span>
               </nav>
             </div>
@@ -353,6 +362,9 @@ function AppContent() {
           <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
             {currentSolarTab === 'veiculos' && (
               <TabelaVeiculos />
+            )}
+            {currentSolarTab === 'tarefas' && (
+              <Tarefas />
             )}
             {currentSolarTab === 'retiradas' && (
               <Retiradas />

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { supabase } from '../../services/supabase';
+import api from '../../../services/api';
 import { COLUMNS, DEFAULT_NEW_TASK } from './constants';
 
-export function useTarefasData({ isAdmin }) {
-  const [tasks, setTasks] = useState([]);
+export function useTarefasData({ user, isAdmin }) {
+  const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState(null);
-  const [session, setSession] = useState(null);
-  const [users, setUsers] = useState([]);
 
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
   const [isTaskDetailsModalOpen, setIsTaskDetailsModalOpen] = useState(false);
@@ -24,94 +23,75 @@ export function useTarefasData({ isAdmin }) {
   const [newTask, setNewTask] = useState(DEFAULT_NEW_TASK);
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_usuarios');
-      if (error) throw error;
-      setUsers(data || []);
-    } catch {
-      toast.error('Erro ao buscar usuários.');
-    }
-  }, []);
+  // -------------------------------------------------------------------------
+  // 1. QUERY: Buscar Tarefas com Polling Inteligente a cada 10 segundos
+  // -------------------------------------------------------------------------
+  const {
+    data: tasks = [],
+    isLoading: isLoadingTasks,
+    refetch: refetchTasks
+  } = useQuery({
+    queryKey: ['gestao-solar', 'tarefas'],
+    queryFn: async () => {
+      const response = await api.get('/gestao-solar/tarefas');
+      const data = response.data.data || [];
 
-  const fetchTasks = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tarefas')
-        .select('*')
-        .order('ordem', { ascending: true })
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const { data: commentsData } = await supabase.from('tarefa_comentarios').select('tarefa_id');
-      const counts = (commentsData || []).reduce((acc, curr) => {
-        acc[curr.tarefa_id] = (acc[curr.tarefa_id] || 0) + 1;
-        return acc;
-      }, {});
-
+      // Calcular drift de relógio
       let maxDrift = 0;
       const now = Date.now();
-      const processedData = (data || []).map((task) => {
-        if (task.created_at) {
-          const drift = new Date(task.created_at).getTime() - now;
+      for (const t of data) {
+        if (t.created_at) {
+          const drift = new Date(t.created_at).getTime() - now;
           if (drift > maxDrift) maxDrift = drift;
         }
-        return {
-          ...task,
-          commentCount: counts[task.id] || 0
-        };
-      });
-
-      if (maxDrift > 0) {
-        setTimeOffset(maxDrift);
       }
+      if (maxDrift > 0) setTimeOffset(maxDrift);
 
-      setTasks(processedData);
-    } catch {
-      toast.error('Erro ao buscar tarefas.');
-    }
-  }, []);
+      return data;
+    },
+    refetchInterval: 10000, // 10s polling
+    refetchOnWindowFocus: true
+  });
 
-  const fetchComments = useCallback(async (taskId) => {
-    try {
-      const { data, error } = await supabase
-        .from('tarefa_comentarios')
-        .select('*')
-        .eq('tarefa_id', taskId)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      setComments(data || []);
-    } catch {
-      toast.error('Erro ao buscar comentários.');
-    }
-  }, []);
+  // -------------------------------------------------------------------------
+  // 2. QUERY: Buscar Usuários Elegíveis para Atribuição e Visualização
+  // -------------------------------------------------------------------------
+  const { data: users = [] } = useQuery({
+    queryKey: ['gestao-solar', 'tarefas', 'usuarios'],
+    queryFn: async () => {
+      const response = await api.get('/gestao-solar/tarefas/usuarios');
+      return response.data.data || [];
+    },
+    staleTime: 60000
+  });
 
+  // Atualização periódica do relógio local (para barras de tempo/SLA)
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
-    supabase.auth.getSession().then(({ data: { session: sessionData } }) => {
-      setSession(sessionData);
-    });
+  // -------------------------------------------------------------------------
+  // 3. COMENTÁRIOS: Carregar comentários da tarefa selecionada
+  // -------------------------------------------------------------------------
+  const fetchComments = useCallback(async (taskId) => {
+    if (!taskId) return;
+    setIsLoadingComments(true);
+    try {
+      const response = await api.get(`/gestao-solar/tarefas/${taskId}/comentarios`);
+      setComments(response.data.data || []);
+    } catch {
+      toast.error('Erro ao carregar comentários da demanda.');
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, []);
 
-    fetchUsers().then(() => {
-      fetchTasks();
-    });
-
-    const channel = supabase
-      .channel('tarefas_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tarefas' }, () => {
-        fetchTasks();
-      })
-      .subscribe();
-
-    return () => {
-      clearInterval(timer);
-      supabase.removeChannel(channel);
-    };
-  }, [fetchTasks, fetchUsers]);
-
+  // -------------------------------------------------------------------------
+  // 4. DRAG AND DROP: Manipulação local e persistência no backend
+  // -------------------------------------------------------------------------
   const handleDragStart = useCallback((event) => {
     setActiveId(event.active.id);
   }, []);
@@ -123,27 +103,24 @@ export function useTarefasData({ isAdmin }) {
 
       const activeTaskId = active.id;
       const overId = over.id;
-
       if (activeTaskId === overId) return;
 
       const isActiveTask = active.data.current?.type === 'Task';
       if (!isActiveTask) return;
 
-      const activeTask = tasks.find((task) => task.id === activeTaskId);
-      const overTaskTitle = COLUMNS.includes(overId) ? overId : tasks.find((task) => task.id === overId)?.status;
+      const activeTask = tasks.find((t) => t.id === activeTaskId);
+      const overStatus = COLUMNS.includes(overId) ? overId : tasks.find((t) => t.id === overId)?.status;
 
-      if (!overTaskTitle || !activeTask) return;
+      if (!overStatus || !activeTask) return;
 
-      if (activeTask.status !== overTaskTitle) {
-        setTasks((currentTasks) => {
-          const activeIndex = currentTasks.findIndex((task) => task.id === activeTaskId);
-          const nextTasks = [...currentTasks];
-          nextTasks[activeIndex].status = overTaskTitle;
-          return nextTasks;
+      if (activeTask.status !== overStatus) {
+        queryClient.setQueryData(['gestao-solar', 'tarefas'], (oldTasks) => {
+          if (!oldTasks) return [];
+          return oldTasks.map((t) => (t.id === activeTaskId ? { ...t, status: overStatus } : t));
         });
       }
     },
-    [tasks]
+    [queryClient, tasks]
   );
 
   const handleDragEnd = useCallback(
@@ -155,60 +132,72 @@ export function useTarefasData({ isAdmin }) {
       const activeTaskId = active.id;
       const overId = over.id;
 
-      const activeTask = tasks.find((task) => task.id === activeTaskId);
-      const overStatus = COLUMNS.includes(overId) ? overId : tasks.find((task) => task.id === overId)?.status;
+      const activeTask = tasks.find((t) => t.id === activeTaskId);
+      const overStatus = COLUMNS.includes(overId) ? overId : tasks.find((t) => t.id === overId)?.status;
 
       if (!activeTask || !overStatus) return;
 
-      try {
-        const { error } = await supabase.from('tarefas').update({ status: overStatus }).eq('id', activeTaskId);
+      // Se a coluna não mudou, nada a fazer
+      if (activeTask.status === overStatus) return;
 
-        if (error) throw error;
+      try {
+        await api.patch(`/gestao-solar/tarefas/${activeTaskId}/status`, { status: overStatus });
 
         if (overStatus === 'Concluído' && activeTask.status !== 'Concluído') {
-          toast.success(`Tarefa "${activeTask.titulo}" concluída!`, { icon: '🎉' });
+          toast.success(`Demanda "${activeTask.titulo}" concluída!`, { icon: '🎉' });
         }
-    } catch {
-      toast.error('Erro ao mover tarefa.');
-      fetchTasks();
+        queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+      } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Erro ao mover demanda no Kanban.';
+        toast.error(errorMsg);
+        queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
       }
     },
-    [fetchTasks, tasks]
+    [queryClient, tasks]
   );
 
+  // -------------------------------------------------------------------------
+  // 5. CRIAÇÃO DE TAREFA
+  // -------------------------------------------------------------------------
   const handleCreateTask = useCallback(
     async (event) => {
       event.preventDefault();
-      if (!newTask.titulo.trim()) return;
+      if (!newTask.titulo.trim()) {
+        toast.error('Informe o título da demanda.');
+        return;
+      }
 
       const loadingToast = toast.loading('Criando demanda...');
       try {
         const payload = {
-          titulo: newTask.titulo,
-          descricao: newTask.descricao,
-          criado_por: session?.user?.id,
+          titulo: newTask.titulo.trim(),
+          descricao: newTask.descricao?.trim() || null,
           status: newTask.status || 'Demandas',
           prioridade: newTask.prioridade || 'Normal'
         };
 
+        // Apenas ADM pode atribuir na criação
         if (isAdmin && newTask.atribuido_a) {
           payload.atribuido_a = newTask.atribuido_a;
         }
 
-        const { error } = await supabase.from('tarefas').insert([payload]);
-        if (error) throw error;
+        await api.post('/gestao-solar/tarefas', payload);
 
         toast.success('Demanda criada com sucesso!', { id: loadingToast });
         setIsNewTaskModalOpen(false);
         setNewTask(DEFAULT_NEW_TASK);
-        fetchTasks();
-      } catch {
-        toast.error('Erro ao criar demanda.', { id: loadingToast });
+        queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+      } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Erro ao criar demanda.';
+        toast.error(errorMsg, { id: loadingToast });
       }
     },
-    [fetchTasks, isAdmin, newTask, session]
+    [isAdmin, newTask, queryClient]
   );
 
+  // -------------------------------------------------------------------------
+  // 6. EXCLUSÃO DE TAREFA
+  // -------------------------------------------------------------------------
   const openDeleteModal = useCallback((task) => {
     setTaskToDelete(task);
     setIsDeleteModalOpen(true);
@@ -224,76 +213,96 @@ export function useTarefasData({ isAdmin }) {
 
     const loadingToast = toast.loading('Excluindo demanda...');
     try {
-      const { error: errComments } = await supabase.from('tarefa_comentarios').delete().eq('tarefa_id', taskToDelete.id);
-      if (errComments) throw errComments;
-
-      const { error: errTask } = await supabase.from('tarefas').delete().eq('id', taskToDelete.id);
-      if (errTask) throw errTask;
+      await api.delete(`/gestao-solar/tarefas/${taskToDelete.id}`);
 
       toast.success('Demanda excluída com sucesso!', { id: loadingToast });
       closeDeleteModal();
-      fetchTasks();
-    } catch {
-      toast.error('Erro ao excluir demanda. Verifique sua conexão.', { id: loadingToast });
+      if (selectedTask?.id === taskToDelete.id) {
+        setIsTaskDetailsModalOpen(false);
+        setSelectedTask(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Erro ao excluir demanda.';
+      toast.error(errorMsg, { id: loadingToast });
     }
-  }, [closeDeleteModal, fetchTasks, taskToDelete]);
+  }, [closeDeleteModal, queryClient, selectedTask?.id, taskToDelete]);
 
+  // -------------------------------------------------------------------------
+  // 7. ATRIBUIÇÃO DE RESPONSÁVEL (Apenas ADM)
+  // -------------------------------------------------------------------------
   const handleAssignTask = useCallback(
     async (taskId, userId) => {
-      if (!isAdmin) return;
-      try {
-        const { error } = await supabase.from('tarefas').update({ atribuido_a: userId || null }).eq('id', taskId);
-        if (error) throw error;
+      if (!isAdmin) {
+        toast.error('Apenas Administradores podem atribuir responsáveis.');
+        return;
+      }
 
-        toast.success('Atribuição atualizada!');
-        fetchTasks();
-        setSelectedTask((prev) => ({ ...prev, atribuido_a: userId || null }));
-      } catch {
-        toast.error('Erro ao atribuir tarefa.');
+      try {
+        const response = await api.patch(`/gestao-solar/tarefas/${taskId}/atribuir`, {
+          atribuido_a: userId || null
+        });
+
+        toast.success('Atribuição atualizada com sucesso!');
+        setSelectedTask((prev) => (prev ? { ...prev, atribuido_a: userId || null, responsavel: response.data.data?.responsavel } : prev));
+        queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+      } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Erro ao atribuir responsável.';
+        toast.error(errorMsg);
       }
     },
-    [fetchTasks, isAdmin]
+    [isAdmin, queryClient]
   );
 
+  // -------------------------------------------------------------------------
+  // 8. ADICIONAR COMENTÁRIO
+  // -------------------------------------------------------------------------
   const handleAddComment = useCallback(
     async (event) => {
       event.preventDefault();
       if (!newComment.trim() || !selectedTask) return;
 
       try {
-        const { error } = await supabase.from('tarefa_comentarios').insert([
-          {
-            tarefa_id: selectedTask.id,
-            usuario_id: session?.user?.id,
-            comentario: newComment
-          }
-        ]);
-        if (error) throw error;
+        const response = await api.post(`/gestao-solar/tarefas/${selectedTask.id}/comentarios`, {
+          comentario: newComment.trim()
+        });
 
         setNewComment('');
-        fetchComments(selectedTask.id);
-        fetchTasks();
-    } catch {
-      toast.error('Erro ao adicionar comentário.');
-    }
+        setComments((prev) => [...prev, response.data.data]);
+        queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+        toast.success('Comentário enviado!');
+      } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Erro ao adicionar comentário.';
+        toast.error(errorMsg);
+      }
     },
-    [fetchComments, fetchTasks, newComment, selectedTask, session]
+    [newComment, queryClient, selectedTask]
   );
 
+  // -------------------------------------------------------------------------
+  // 9. SALVAR DESCRIÇÃO DETALHADA
+  // -------------------------------------------------------------------------
   const handleSaveDesc = useCallback(async () => {
+    if (!selectedTask) return;
+
     try {
-      const { error } = await supabase.from('tarefas').update({ descricao: tempDesc }).eq('id', selectedTask.id);
-      if (error) throw error;
+      await api.put(`/gestao-solar/tarefas/${selectedTask.id}`, {
+        descricao: tempDesc
+      });
 
       toast.success('Descrição atualizada!');
-      setSelectedTask({ ...selectedTask, descricao: tempDesc });
+      setSelectedTask((prev) => (prev ? { ...prev, descricao: tempDesc } : prev));
       setIsEditingDesc(false);
-      fetchTasks();
-    } catch {
-      toast.error('Erro ao atualizar descrição.');
+      queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Erro ao atualizar descrição.';
+      toast.error(errorMsg);
     }
-  }, [fetchTasks, selectedTask, tempDesc]);
+  }, [queryClient, selectedTask, tempDesc]);
 
+  // -------------------------------------------------------------------------
+  // 10. MODAL DE DETALHES
+  // -------------------------------------------------------------------------
   const openTaskDetails = useCallback(
     (task) => {
       setSelectedTask(task);
@@ -307,12 +316,13 @@ export function useTarefasData({ isAdmin }) {
 
   const closeTaskDetails = useCallback(() => {
     setIsTaskDetailsModalOpen(false);
+    setSelectedTask(null);
+    setComments([]);
   }, []);
 
   return {
     tasks,
     activeId,
-    session,
     users,
     isNewTaskModalOpen,
     isTaskDetailsModalOpen,
@@ -326,6 +336,8 @@ export function useTarefasData({ isAdmin }) {
     newTask,
     newComment,
     comments,
+    isLoadingTasks,
+    isLoadingComments,
     setIsNewTaskModalOpen,
     setIsEditingDesc,
     setTempDesc,
@@ -342,6 +354,7 @@ export function useTarefasData({ isAdmin }) {
     handleAddComment,
     handleSaveDesc,
     openTaskDetails,
-    closeTaskDetails
+    closeTaskDetails,
+    refetchTasks
   };
 }

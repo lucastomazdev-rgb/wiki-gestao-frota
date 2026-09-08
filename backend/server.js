@@ -23,6 +23,7 @@ import {
 import { recordAuditEvent } from './services/auditLogger.js';
 import createGestaoSolarRouter from './routes/gestaoSolar.js';
 import createTecnicosTerceirizadosRouter from './routes/tecnicosTerceirizados.js';
+import createTarefasRouter from './routes/tarefas.js';
 
 dotenv.config();
 
@@ -92,12 +93,22 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
+// 🩺 Healthcheck endpoint ultra-rápido para Render (Health Check Path) e monitoramento de uptime
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ⚡ Rate Limiter Global para rotas da API (Proteção contra DoS)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 1000, // adequado para ~7 usuários atrás do mesmo IP corporativo
+  max: 3000, // Ajustado para suportar polling e múltiplos usuários atrás do mesmo IP corporativo
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/health',
   message: {
     status: 'error',
     message: 'Muitas requisições enviadas por este IP. Por favor, tente novamente em alguns instantes.'
@@ -105,7 +116,9 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 app.use('/api', (req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store');
+  if (!res.getHeader('Cache-Control')) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
   next();
 });
 
@@ -899,6 +912,7 @@ app.delete('/api/articles/:id', protect, restrictTo('ADMIN'), async (req, res, n
 // --- ROTAS DO MÓDULO GESTÃO SOLAR ---
 app.use('/api', createGestaoSolarRouter(prisma, protect));
 app.use('/api/gestao-solar', createTecnicosTerceirizadosRouter(prisma, protect));
+app.use('/api/gestao-solar', createTarefasRouter(prisma, protect));
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
@@ -949,6 +963,30 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// 🛑 Graceful Shutdown para Render / Process Manager
+const gracefulShutdown = async (signal) => {
+  console.log(`Recebido ${signal}. Encerrando conexões graciosamente...`);
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log('Conexões com banco de dados encerradas.');
+      process.exit(0);
+    } catch (err) {
+      console.error('Erro ao desconectar Prisma:', err);
+      process.exit(1);
+    }
+  });
+
+  setTimeout(() => {
+    console.error('Encerramento forçado por timeout após 10s.');
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+

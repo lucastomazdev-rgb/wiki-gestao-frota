@@ -11,13 +11,16 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CheckCircle2, Clock, Layers, MessageSquare, Trash2, User as UserIcon } from 'lucide-react';
+import { CheckCircle2, Clock, Layers, Lock, MessageSquare, Trash2, User as UserIcon } from 'lucide-react';
 import { COLUMNS } from './constants';
 
 function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, usersList, currentTime }) {
+  const canDrag = isAdmin || task.criado_por === currentUserId;
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
-    data: { type: 'Task', task }
+    data: { type: 'Task', task },
+    disabled: !canDrag
   });
 
   const style = {
@@ -36,7 +39,9 @@ function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, use
   }
 
   const isAssignedToMe = task.atribuido_a === currentUserId;
-  const assignedUser = usersList?.find((user) => user.id === task.atribuido_a);
+  const isCreatedByMe = task.criado_por === currentUserId;
+  const assignedUser = task.responsavel || usersList?.find((user) => user.id === task.atribuido_a);
+  const creatorUser = task.criador || usersList?.find((user) => user.id === task.criado_por);
 
   const getExpirationData = () => {
     if (!task.created_at || task.status === 'Concluído') return null;
@@ -78,36 +83,57 @@ function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, use
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
+      {...(canDrag ? listeners : {})}
       onClick={() => onClick(task)}
-      className={`p-2.5 rounded-2xl mb-3 cursor-grab active:cursor-grabbing transition-all duration-300 group relative overflow-hidden hover:scale-[1.02] active:scale-95 ${
+      className={`p-3 rounded-2xl mb-3 transition-all duration-300 group relative overflow-hidden select-none ${
+        canDrag
+          ? 'cursor-grab active:cursor-grabbing hover:scale-[1.015] active:scale-95'
+          : 'cursor-pointer hover:border-slate-300'
+      } ${
         isAssignedToMe
           ? 'bg-gradient-to-br from-teal-50/40 to-white border border-teal-400 shadow-md shadow-teal-500/10 hover:border-teal-500'
-          : 'bg-white border border-slate-200/60 shadow-sm hover:shadow-md hover:border-teal-200'
+          : 'bg-white border border-slate-200/70 shadow-xs hover:shadow-md hover:border-teal-300'
       }`}
     >
-      {isAssignedToMe && <div className="absolute left-0 top-0 bottom-0 w-1 bg-teal-500 rounded-l-2xl"></div>}
+      {isAssignedToMe && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-teal-500 rounded-l-2xl"></div>}
+      
       <div className="flex justify-between items-start mb-2 pl-0.5">
-        <h4 className="font-black text-slate-800 text-[13px] tracking-tight leading-tight pr-14 break-words">{task.titulo}</h4>
+        <h4 className="font-black text-slate-800 text-[13px] tracking-tight leading-snug pr-14 break-words">
+          {task.titulo}
+        </h4>
 
-        {(isAdmin || task.criado_por === currentUserId) && (
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete(task);
-            }}
-            className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100 absolute top-2 right-8 hover:scale-110 active:scale-90"
-            title="Excluir Demanda"
-          >
-            <Trash2 size={14} strokeWidth={2.5} />
-          </button>
-        )}
+        <div className="flex items-center gap-1 absolute top-2.5 right-2.5">
+          {!canDrag && !isAdmin && (
+            <span
+              className="p-1 text-slate-300 group-hover:text-slate-400 transition-colors"
+              title="Apenas o autor ou administradores podem mover esta demanda"
+            >
+              <Lock size={12} strokeWidth={2.2} />
+            </span>
+          )}
 
-        {task.status === 'Concluído' && <CheckCircle2 size={14} className="text-emerald-500 absolute top-3 right-3" />}
+          {(isAdmin || isCreatedByMe) && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(task);
+              }}
+              className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-90 cursor-pointer"
+              title="Excluir Demanda"
+            >
+              <Trash2 size={14} strokeWidth={2.5} />
+            </button>
+          )}
+
+          {task.status === 'Concluído' && <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />}
+        </div>
       </div>
 
       {task.descricao && (
-        <p className="text-[11px] font-medium text-slate-500 line-clamp-2 mb-3 mt-1 leading-relaxed">{task.descricao}</p>
+        <p className="text-[11px] font-medium text-slate-500 line-clamp-2 mb-3 mt-1 leading-relaxed pl-0.5">
+          {task.descricao}
+        </p>
       )}
 
       {expData && (
@@ -137,31 +163,39 @@ function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, use
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 text-[10px]">
+        {/* Atribuição */}
         <div className="flex items-center gap-2">
-          {task.atribuido_a && assignedUser ? (
+          {assignedUser ? (
             <div
               className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter border ${
                 isAssignedToMe
-                  ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-sm'
-                  : 'bg-slate-50 text-slate-500 border-slate-200'
+                  ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-xs'
+                  : 'bg-slate-50 text-slate-600 border-slate-200'
               }`}
+              title={`Atribuído a: ${assignedUser.name || assignedUser.email}`}
             >
               <UserIcon size={10} />
-              <span className="max-w-[70px] truncate">{assignedUser.email.split('@')[0]}</span>
+              <span className="max-w-[80px] truncate">{(assignedUser.name || assignedUser.email).split('@')[0]}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter bg-slate-50 text-slate-300 border border-slate-100">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter bg-slate-50 text-slate-400 border border-slate-100">
               <span>Sem Atribuição</span>
             </div>
           )}
+
+          {/* Badge Criador */}
+          {creatorUser && (
+            <span className="text-[9px] text-slate-400 hidden sm:inline" title={`Criado por: ${creatorUser.name || creatorUser.email}`}>
+              por {(creatorUser.name || creatorUser.email).split('@')[0]}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 text-slate-300 text-[10px] font-black">
-          <div className="flex items-center gap-1 hover:text-teal-500 transition-colors">
-            <MessageSquare size={13} />
-            <span>{task.commentCount || 0}</span>
-          </div>
+        {/* Comentários */}
+        <div className="flex items-center gap-1 text-slate-400 hover:text-teal-600 transition-colors font-bold">
+          <MessageSquare size={12} />
+          <span>{task.commentCount || 0}</span>
         </div>
       </div>
     </div>
@@ -174,20 +208,20 @@ function Column({ id, title, tasks, onTaskClick, onDeleteTask, isAdmin, currentU
   return (
     <div
       ref={setNodeRef}
-      className="flex flex-col shrink-0 lg:flex-1 lg:min-w-0 min-w-[260px] bg-slate-50/50 rounded-[2rem] border border-slate-200/50 p-4 h-full shadow-inner relative overflow-hidden group/column"
+      className="flex flex-col shrink-0 lg:flex-1 lg:min-w-0 min-w-[270px] bg-slate-50/70 rounded-[2rem] border border-slate-200/70 p-4 h-full shadow-inner relative overflow-hidden group/column"
     >
       <div className="absolute top-0 right-0 w-24 h-24 bg-slate-100/50 rounded-full blur-3xl -translate-y-8 translate-x-8 opacity-0 group-hover/column:opacity-100 transition-opacity"></div>
 
       <div className="flex items-center justify-between mb-4 px-1.5 relative z-10">
         <div className="flex items-center gap-2">
           <h3 className="font-black text-slate-700 text-[11px] uppercase tracking-widest">{title}</h3>
-          <span className="bg-white text-slate-800 text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm border border-slate-100 ring-1 ring-slate-100">
+          <span className="bg-white text-slate-800 text-[10px] font-black px-2.5 py-0.5 rounded-lg shadow-xs border border-slate-200">
             {tasks.length}
           </span>
         </div>
       </div>
 
-      <div className="flex-1 px-2 -mx-2 relative z-10 overflow-y-auto custom-scrollbar max-h-[580px] py-2">
+      <div className="flex-1 px-1 -mx-1 relative z-10 overflow-y-auto custom-scrollbar max-h-[620px] py-1">
         <SortableContext id={id} items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             {tasks.map((task) => (
@@ -205,11 +239,11 @@ function Column({ id, title, tasks, onTaskClick, onDeleteTask, isAdmin, currentU
           </div>
         </SortableContext>
         {tasks.length === 0 && (
-          <div className="h-32 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 bg-white/30 transition-colors hover:bg-white/50">
+          <div className="h-32 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 bg-white/40 transition-colors">
             <div className="p-2 bg-slate-50 rounded-xl text-slate-300">
-              <Layers size={20} />
+              <Layers size={18} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Vazio</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nenhuma Demanda</span>
           </div>
         )}
       </div>
@@ -236,8 +270,8 @@ export default function TarefasBoard({
   );
 
   return (
-    <div className="flex-grow overflow-x-auto pb-10 -mx-4 px-4 lg:mx-0 lg:px-0 custom-scrollbar-horizontal">
-      <div className="flex gap-4 min-h-[500px] h-full min-w-[1100px] lg:min-w-full items-start px-2 py-1">
+    <div className="flex-grow overflow-x-auto pb-8 -mx-4 px-4 lg:mx-0 lg:px-0 custom-scrollbar-horizontal">
+      <div className="flex gap-4 min-h-[520px] h-full min-w-[1100px] lg:min-w-full items-start px-1 py-1">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -250,7 +284,7 @@ export default function TarefasBoard({
               key={columnId}
               id={columnId}
               title={columnId}
-              tasks={columnsData[columnId]}
+              tasks={columnsData[columnId] || []}
               onTaskClick={onTaskClick}
               onDeleteTask={onRequestDelete}
               isAdmin={isAdmin}
@@ -262,7 +296,7 @@ export default function TarefasBoard({
 
           <DragOverlay>
             {activeTask ? (
-              <div className="transform scale-105 rotate-2 opacity-90 shadow-2xl cursor-grabbing">
+              <div className="transform scale-105 rotate-1 opacity-95 shadow-2xl cursor-grabbing">
                 <SortableTaskCard
                   task={activeTask}
                   onClick={() => {}}
