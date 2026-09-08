@@ -13,7 +13,11 @@ import {
   Box, 
   AlertTriangle,
   ChevronRight,
-  Eye
+  Eye,
+  Edit2,
+  Trash2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export default function TabelaOrdensServico({
@@ -21,6 +25,8 @@ export default function TabelaOrdensServico({
   loading = false,
   onAtualizarStatus,
   onConfirmarDevolucao,
+  onEditarOS,
+  onExcluirOS,
   filtroPendenteDevolucao,
   setFiltroPendenteDevolucao,
   filtroStatus,
@@ -30,6 +36,14 @@ export default function TabelaOrdensServico({
   onNovaOS
 }) {
   const [modalConfirmacaoDevolucao, setModalConfirmacaoDevolucao] = useState(null);
+  const [linhasExpandidas, setLinhasExpandidas] = useState({});
+
+  const toggleExpandirLinha = (osId) => {
+    setLinhasExpandidas(prev => ({
+      ...prev,
+      [osId]: !prev[osId]
+    }));
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -118,15 +132,15 @@ export default function TabelaOrdensServico({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-black text-[10px]">
-                <th className="py-3.5 px-4">O.S & Data</th>
-                <th className="py-3.5 px-4">Veículo / Unidade</th>
-                <th className="py-3.5 px-4">Técnico Responsável</th>
-                <th className="py-3.5 px-4">Serviço Prestado</th>
-                <th className="py-3.5 px-4 text-center">Deslocamento</th>
-                <th className="py-3.5 px-4 text-right">Valor Total / NF</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
-                <th className="py-3.5 px-4 text-center">Logística Reversa</th>
+              <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-black text-[10px] whitespace-nowrap">
+                <th className="py-3.5 px-4 min-w-[100px]">O.S & Data</th>
+                <th className="py-3.5 px-4 min-w-[140px]">Veículo / Unidade</th>
+                <th className="py-3.5 px-4 min-w-[140px]">Técnico Responsável</th>
+                <th className="py-3.5 px-4 min-w-[180px]">Serviço Prestado</th>
+                <th className="py-3.5 px-4 text-center min-w-[110px]">Deslocamento</th>
+                <th className="py-3.5 px-4 text-right min-w-[130px]">Valor Total / NF</th>
+                <th className="py-3.5 px-4 text-center min-w-[130px]">Status</th>
+                <th className="py-3.5 px-4 text-center min-w-[140px]">Logística Reversa</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -155,7 +169,7 @@ export default function TabelaOrdensServico({
                       }`}
                     >
                       {/* O.S & Data */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <span className="font-black text-slate-900 block text-xs">
                           {os.numero_os}
                         </span>
@@ -167,7 +181,7 @@ export default function TabelaOrdensServico({
                       {/* Veículo / Unidade */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 bg-slate-900 text-white font-black text-[11px] rounded-lg tracking-wider">
+                          <span className="px-2 py-0.5 bg-slate-900 text-white font-black text-[11px] rounded-lg tracking-wider whitespace-nowrap">
                             {os.placa}
                           </span>
                           {os.uf && (
@@ -191,34 +205,70 @@ export default function TabelaOrdensServico({
                         </span>
                       </td>
 
-                      {/* Serviço & Equipamentos Utilizados */}
+                      {/* Serviço & Equipamentos Utilizados (com expansão dinâmica +X Itens) */}
                       <td className="py-3.5 px-4">
                         <span className="font-bold text-slate-800 block text-xs">
                           {os.nome_servico}
                         </span>
-                        {os.equipamentos_utilizados && Array.isArray(os.equipamentos_utilizados) && os.equipamentos_utilizados.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {os.equipamentos_utilizados.map((eq, i) => (
-                              <span 
-                                key={i}
-                                className="px-1.5 py-0.2 bg-teal-50 text-teal-700 border border-teal-200 rounded text-[9px] font-black"
-                              >
-                                {eq.modelo} ({eq.quantidade} un)
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {os.equipamentos_utilizados && Array.isArray(os.equipamentos_utilizados) && os.equipamentos_utilizados.length > 0 && (() => {
+                          const equips = os.equipamentos_utilizados;
+                          const LIMITE_ITENS_PADRAO = 2;
+                          const temMaisItens = equips.length > LIMITE_ITENS_PADRAO;
+                          const estaExpandido = Boolean(linhasExpandidas[os.id]);
+                          const equipsVisiveis = estaExpandido ? equips : equips.slice(0, LIMITE_ITENS_PADRAO);
+                          const qtdOcultos = equips.length - LIMITE_ITENS_PADRAO;
+
+                          return (
+                            <div className="flex flex-wrap items-center gap-1 mt-1">
+                              {equipsVisiveis.map((eq, i) => (
+                                <span 
+                                  key={i}
+                                  title={`${eq.modelo} - ${eq.quantidade} un`}
+                                  className="px-1.5 py-0.5 bg-teal-50 text-teal-800 border border-teal-200/80 rounded-md text-[9px] font-black inline-flex items-center gap-1 max-w-[170px]"
+                                >
+                                  <span className="truncate">{eq.modelo}</span>
+                                  <strong className="text-teal-900 shrink-0">({eq.quantidade} un)</strong>
+                                </span>
+                              ))}
+
+                              {temMaisItens && !estaExpandido && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandirLinha(os.id)}
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 transition-all cursor-pointer shadow-2xs active:scale-95"
+                                  title={`Clique para ver mais ${qtdOcultos} equipamento(s)`}
+                                >
+                                  <span>+{qtdOcultos} Itens</span>
+                                  <ChevronDown size={10} />
+                                </button>
+                              )}
+
+                              {temMaisItens && estaExpandido && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandirLinha(os.id)}
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all cursor-pointer shadow-2xs active:scale-95"
+                                  title="Recolher equipamentos"
+                                >
+                                  <span>Recolher</span>
+                                  <ChevronUp size={10} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Deslocamento KM */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap min-w-[110px]">
                         {os.teve_km_rodado ? (
-                          <div className="inline-block text-center">
-                            <span className="font-black text-slate-800 text-[11px] block">
+                          <div className="inline-block text-center whitespace-nowrap">
+                            <span className="font-black text-slate-800 text-[11px] block whitespace-nowrap">
                               {os.km_quantidade} km
                             </span>
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              R$ {Number(os.valor_km_total).toFixed(2)}
+                            <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap inline-flex items-center justify-center gap-0.5">
+                              <span className="text-[9px] text-slate-400">R$</span>
+                              <span>{Number(os.valor_km_total).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </span>
                           </div>
                         ) : (
@@ -227,38 +277,64 @@ export default function TabelaOrdensServico({
                       </td>
 
                       {/* Total Cobrado & NF */}
-                      <td className="py-3.5 px-4 text-right">
-                        <span className="font-black text-slate-900 text-xs block text-emerald-700">
-                          R$ {Number(os.valor_total_cobrado).toFixed(2)}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap min-w-[130px]">
+                        <span className="font-black text-slate-900 text-xs text-emerald-700 whitespace-nowrap inline-flex items-center justify-end gap-1">
+                          <span className="text-[11px] font-bold text-emerald-600">R$</span>
+                          <span>{Number(os.valor_total_cobrado).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </span>
                         {os.numero_nf ? (
-                          <span className="text-[10px] font-bold text-slate-500 block">
+                          <span className="text-[10px] font-bold text-slate-500 block truncate max-w-[130px]">
                             NF: {os.numero_nf}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-slate-300 font-medium">
+                          <span className="text-[10px] text-slate-300 font-medium block">
                             Sem NF
                           </span>
                         )}
                       </td>
 
-                      {/* Status com Dropdown */}
-                      <td className="py-3.5 px-4 text-center">
-                        <select
-                          value={os.status}
-                          onChange={(e) => onAtualizarStatus(os.id, e.target.value)}
-                          className={`text-xs font-bold px-2 py-1 rounded-xl border transition-all cursor-pointer outline-none ${
-                            os.status === 'Realizado'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-black'
-                              : os.status === 'Aguardando data'
-                                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          <option value="Agendado">Agendado</option>
-                          <option value="Aguardando data">Aguardando Data</option>
-                          <option value="Realizado">Realizado ✅</option>
-                        </select>
+                      {/* Status com Dropdown e Ações Minimalistas */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <select
+                            value={os.status}
+                            onChange={(e) => onAtualizarStatus(os.id, e.target.value)}
+                            className={`text-xs font-bold px-2 py-1 rounded-xl border transition-all cursor-pointer outline-none ${
+                              os.status === 'Realizado'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-black'
+                                : os.status === 'Aguardando data'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            <option value="Agendado">Agendado</option>
+                            <option value="Aguardando data">Aguardando Data</option>
+                            <option value="Realizado">Realizado ✅</option>
+                          </select>
+
+                          {/* Ações Minimalistas e Cuidadosas */}
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => onEditarOS?.(os)}
+                              className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-all cursor-pointer border border-transparent hover:border-teal-200/80 active:scale-95"
+                              title="Editar Ordem de Serviço"
+                              aria-label={`Editar O.S. ${os.numero_os}`}
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <span className="text-slate-300 text-[10px] select-none">•</span>
+                            <button
+                              type="button"
+                              onClick={() => onExcluirOS?.(os)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer border border-transparent hover:border-rose-200/80 active:scale-95"
+                              title="Excluir Ordem de Serviço"
+                              aria-label={`Excluir O.S. ${os.numero_os}`}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
                       </td>
 
                       {/* Logística Reversa / Devolução de Material */}

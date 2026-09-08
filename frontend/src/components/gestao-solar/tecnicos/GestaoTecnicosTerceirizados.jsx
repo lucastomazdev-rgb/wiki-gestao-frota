@@ -57,10 +57,15 @@ export default function GestaoTecnicosTerceirizados() {
 
   const [modalOSOpen, setModalOSOpen] = useState(false);
   const [tecnicoParaOS, setTecnicoParaOS] = useState(null);
+  const [ordemEmEdicao, setOrdemEmEdicao] = useState(null);
 
   // Modal de Confirmação de Exclusão de Técnico
   const [tecnicoParaExcluir, setTecnicoParaExcluir] = useState(null);
   const [excluindoTecnico, setExcluindoTecnico] = useState(false);
+
+  // Modal de Confirmação de Exclusão de O.S.
+  const [ordemParaExcluir, setOrdemParaExcluir] = useState(null);
+  const [excluindoOS, setExcluindoOS] = useState(false);
 
   // Carregar Técnicos
   const fetchTecnicos = async () => {
@@ -165,10 +170,38 @@ export default function GestaoTecnicosTerceirizados() {
     setModalCargaOpen(true);
   };
 
-  // Ações de Lançamento de O.S
+  // Ações de Lançamento e Edição de O.S
   const handleAbrirLancamentoOS = (tecnico = null) => {
+    setOrdemEmEdicao(null);
     setTecnicoParaOS(tecnico);
     setModalOSOpen(true);
+  };
+
+  const handleEditarOS = (ordem) => {
+    setOrdemEmEdicao(ordem);
+    setTecnicoParaOS(null);
+    setModalOSOpen(true);
+  };
+
+  const handleExcluirOS = (ordem) => {
+    setOrdemParaExcluir(ordem);
+  };
+
+  const handleConfirmarExcluirOS = async () => {
+    if (!ordemParaExcluir) return;
+    try {
+      setExcluindoOS(true);
+      const res = await api.delete(`/gestao-solar/ordens-servicos/${ordemParaExcluir.id}`);
+      toast.success(res.data?.message || 'Ordem de Serviço excluída com sucesso.');
+      setOrdemParaExcluir(null);
+      fetchOrdens();
+      fetchTecnicos();
+      fetchKpis();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erro ao excluir Ordem de Serviço.');
+    } finally {
+      setExcluindoOS(false);
+    }
   };
 
   // Atualizar Status da O.S
@@ -428,6 +461,8 @@ export default function GestaoTecnicosTerceirizados() {
           loading={loadingOrdens}
           onAtualizarStatus={handleAtualizarStatusOS}
           onConfirmarDevolucao={handleConfirmarDevolucao}
+          onEditarOS={handleEditarOS}
+          onExcluirOS={handleExcluirOS}
           filtroPendenteDevolucao={filtroPendenteDevolucao}
           setFiltroPendenteDevolucao={setFiltroPendenteDevolucao}
           filtroStatus={filtroStatusOS}
@@ -463,12 +498,16 @@ export default function GestaoTecnicosTerceirizados() {
         }}
       />
 
-      {/* Modal 3: Lançamento de Ordem de Serviço */}
+      {/* Modal 3: Lançamento / Edição de Ordem de Serviço */}
       <ModalLancamentoOS
         isOpen={modalOSOpen}
-        onClose={() => setModalOSOpen(false)}
+        onClose={() => {
+          setModalOSOpen(false);
+          setOrdemEmEdicao(null);
+        }}
         tecnicos={tecnicos}
         tecnicoPreSelecionado={tecnicoParaOS}
+        ordemParaEditar={ordemEmEdicao}
         onSuccess={() => {
           fetchOrdens();
           fetchTecnicos();
@@ -489,6 +528,26 @@ export default function GestaoTecnicosTerceirizados() {
         cancelLabel="Cancelar"
         onConfirm={handleConfirmarExcluirTecnico}
         onCancel={() => !excluindoTecnico && setTecnicoParaExcluir(null)}
+        danger={true}
+      />
+
+      {/* Modal 5: Confirmação de Exclusão de Ordem de Serviço */}
+      <ConfirmModal
+        isOpen={Boolean(ordemParaExcluir)}
+        title="Excluir Ordem de Serviço"
+        message={
+          ordemParaExcluir
+            ? `Deseja realmente excluir a Ordem de Serviço nº "${ordemParaExcluir.numero_os}" do veículo ${ordemParaExcluir.placa}? ${
+                ordemParaExcluir.status === 'Realizado' && ordemParaExcluir.equipamentos_utilizados?.length
+                  ? 'Os equipamentos baixados no estoque do técnico serão estornados automaticamente.'
+                  : ''
+              }`
+            : ''
+        }
+        confirmLabel={excluindoOS ? 'Excluindo...' : 'Excluir O.S.'}
+        cancelLabel="Cancelar"
+        onConfirm={handleConfirmarExcluirOS}
+        onCancel={() => !excluindoOS && setOrdemParaExcluir(null)}
         danger={true}
       />
     </div>

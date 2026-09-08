@@ -86,6 +86,38 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
     }
   };
 
+  const incrementEquipmentStock = async (tx, tecnicoId, equipments, reason) => {
+    for (const item of equipments) {
+      await tx.tecnico_equipamentos.upsert({
+        where: {
+          tecnico_id_modelo_equipamento: {
+            tecnico_id: tecnicoId,
+            modelo_equipamento: item.modelo
+          }
+        },
+        update: {
+          quantidade: { increment: item.quantidade },
+          atualizado_em: new Date()
+        },
+        create: {
+          tecnico_id: tecnicoId,
+          modelo_equipamento: item.modelo,
+          quantidade: item.quantidade
+        }
+      });
+
+      await tx.tecnico_movimentacoes_equipamentos.create({
+        data: {
+          tecnico_id: tecnicoId,
+          modelo_equipamento: item.modelo,
+          tipo: 'ESTORNO_OS',
+          quantidade: item.quantidade,
+          motivo_ou_os: reason
+        }
+      });
+    }
+  };
+
   // =========================================================================
   // 1. TÉCNICOS TERCEIRIZADOS (CRUD + SERVIÇOS + EQUIPAMENTOS)
   // =========================================================================
@@ -1099,6 +1131,174 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         status: 'success',
         message: 'Devolução de equipamento confirmada com sucesso! Logística reversa finalizada.',
         data: { ordem_servico: osFinalizada }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Editar Ordem de Serviço
+  router.put('/ordens-servicos/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const input = orderSchema.parse(req.body);
+      const newEquips = consolidateEquipment(input.equipamentos_utilizados);
+
+      const osAtualizada = await prisma.$transaction(async (tx) => {
+        const current = await tx.ordens_servicos_terceirizados.findUnique({ where: { id } });
+        if (!current) throw httpError(404, 'Ordem de serviço não encontrada.');
+
+        const servico = await tx.tecnico_servicos_precos.findFirst({
+          where: { id: input.servico_id, tecnico_id: input.tecnico_id },
+          select: { id: true, nome_servico: true, valor: true, gera_devolucao: true, is_km: true }
+        });
+        if (!servico) throw httpError(404, 'Serviço não encontrado na tabela deste técnico.');
+        if (servico.is_km) throw httpError(400, 'Selecione um serviço principal; KM é calculado separadamente.');
+
+        const kmService = input.teve_km_rodado
+          ? await tx.tecnico_servicos_precos.findFirst({
+            where: { tecnico_id: input.tecnico_id, is_km: true },
+            orderBy: { criado_em: 'asc' },
+            select: { valor: true }
+          })
+          : null;
+        if (input.teve_km_rodado && !kmService) {
+          throw httpError(400, 'Este técnico não possui uma tarifa de KM cadastrada.');
+        }
+
+        const vServico = Number(servico.valor);
+        const qKm = input.teve_km_rodado ? input.km_quantidade : 0;
+        const vKmUnit = kmService ? Number(kmService.valor) : 0;
+        const vKmTotal = Number((qKm * vKmUnit).toFixed(2));
+        const vTotal = Number((vServico + vKmTotal).toFixed(2));
+
+        const oldEquips = consolidateEquipment(
+          Array.isArray(current.equipamentos_utilizados)
+            ? orderSchema.shape.equipamentos_utilizados.parse(current.equipamentos_utilizados)
+            : []
+        );
+
+        // Gerenciamento transacional de estoque na edição
+        if (current.status === 'Realizado' && input.status !== 'Realizado') {
+          // Estorna itens baixados anteriormente
+          if (oldEquips.length > 0) {
+            await incrementEquipmentStock(
+              tx,
+              current.tecnico_id,
+              oldEquips,
+              `Estorno por alteração de status da O.S. ${current.numero_os} para "${input.status}"`
+            );
+          }
+        } else if (current.status !== 'Realizado' && input.status === 'Realizado') {
+          // Realiza baixa dos novos itens
+          if (newEquips.length > 0) {
+            await decrementEquipmentStock(
+              tx,
+              input.tecnico_id,
+              newEquips,
+              `Baixa automática na conclusão da O.S. ${input.numero_os} (Placa: ${input.placa})`
+            );
+          }
+        } else if (current.status === 'Realizado' && input.status === 'Realizado') {
+          // Permanece Realizado: se mudou o técnico ou os itens, estorna os antigos e baixa os novos
+          const tecnicoMudou = current.tecnico_id !== input.tecnico_id;
+          const itensIguais = !tecnicoMudou &&
+            oldEquips.length === newEquips.length &&
+            oldEquips.every(o => newEquips.some(n => n.modelo === o.modelo && n.quantidade === o.quantidade));
+
+          if (!itensIguais) {
+            if (oldEquips.length > 0) {
+              await incrementEquipmentStock(
+                tx,
+                current.tecnico_id,
+                oldEquips,
+                `Estorno por reconfiguração de itens na O.S. ${current.numero_os}`
+              );
+            }
+            if (newEquips.length > 0) {
+              await decrementEquipmentStock(
+                tx,
+                input.tecnico_id,
+                newEquips,
+                `Baixa reconfigurada na O.S. ${input.numero_os}`
+              );
+            }
+          }
+        }
+
+        return tx.ordens_servicos_terceirizados.update({
+          where: { id },
+          data: {
+            numero_os: input.numero_os,
+            tecnico_id: input.tecnico_id,
+            servico_id: servico.id,
+            placa: input.placa,
+            uf: input.uf || null,
+            unidade: input.unidade || null,
+            tipo_veiculo: input.tipo_veiculo || null,
+            nome_servico: servico.nome_servico,
+            valor_servico: vServico,
+            teve_km_rodado: input.teve_km_rodado,
+            km_quantidade: qKm,
+            valor_km_unitario: vKmUnit,
+            valor_km_total: vKmTotal,
+            valor_total_cobrado: vTotal,
+            numero_nf: input.numero_nf || null,
+            status: input.status,
+            equipamentos_utilizados: newEquips.length > 0 ? newEquips : null,
+            exige_devolucao: servico.gera_devolucao
+          },
+          include: {
+            tecnico: {
+              select: { id: true, nome: true, regiao: true }
+            }
+          }
+        });
+      }, { maxWait: 10000, timeout: 30000 });
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Ordem de Serviço atualizada com sucesso!',
+        data: { ordem_servico: osAtualizada }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Excluir Ordem de Serviço
+  router.delete('/ordens-servicos/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      await prisma.$transaction(async (tx) => {
+        const current = await tx.ordens_servicos_terceirizados.findUnique({ where: { id } });
+        if (!current) throw httpError(404, 'Ordem de serviço não encontrada.');
+
+        // Se a O.S. já estava como "Realizado" e havia baixado equipamentos, estorna para o estoque do técnico
+        if (current.status === 'Realizado') {
+          const oldEquips = consolidateEquipment(
+            Array.isArray(current.equipamentos_utilizados)
+              ? orderSchema.shape.equipamentos_utilizados.parse(current.equipamentos_utilizados)
+              : []
+          );
+
+          if (oldEquips.length > 0) {
+            await incrementEquipmentStock(
+              tx,
+              current.tecnico_id,
+              oldEquips,
+              `Estorno por exclusão da O.S. ${current.numero_os} (Placa: ${current.placa})`
+            );
+          }
+        }
+
+        await tx.ordens_servicos_terceirizados.delete({ where: { id } });
+      }, { maxWait: 10000, timeout: 30000 });
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Ordem de Serviço excluída com sucesso!'
       });
     } catch (error) {
       next(error);

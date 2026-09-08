@@ -266,8 +266,9 @@ export default function CardTecnico({
                     </span>
                   )}
                 </div>
-                <span className="font-black text-slate-900 shrink-0 ml-2">
-                  R$ {Number(s.valor).toFixed(2)}
+                <span className="font-black text-slate-900 shrink-0 ml-2 whitespace-nowrap inline-flex items-center gap-0.5">
+                  <span className="text-[10px] text-slate-400 font-bold">R$</span>
+                  <span>{Number(s.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </span>
               </div>
             ))}
