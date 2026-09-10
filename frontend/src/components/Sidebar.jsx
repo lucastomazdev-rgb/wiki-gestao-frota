@@ -13,6 +13,7 @@ import {
   PanelLeftOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ICON_MAP } from '../utils/iconMap';
 
 export default function Sidebar({ 
   currentTab, 
@@ -205,18 +206,28 @@ export default function Sidebar({
         <div className="space-y-1">
           {categories.map((cat) => {
             const isCatSelected = currentTab === 'home' && selectedCategoryId === cat.id;
+            const CatIcon = ICON_MAP[cat.iconName] || FolderOpen;
+            const isCocaCola = cat.slug === 'processos-coca-cola' || cat.iconName === 'CocaCola' || cat.iconName === 'CocaColaBottle';
+
             return (
               <div key={cat.id} className="relative group">
                 <button
                   onClick={() => handleCategoryClick(cat.id)}
                   className={`w-full flex items-center p-2 rounded-xl text-xs transition-all cursor-pointer text-left ${
                     isCatSelected
-                      ? 'bg-slate-800/90 text-amber-400 font-bold border-l-2 border-amber-500 shadow-xs'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5 border-l-2 border-transparent'
+                      ? (isCocaCola ? 'bg-slate-800/90 text-red-400 font-bold border-l-2 border-red-500 shadow-xs' : 'bg-slate-800/90 text-amber-400 font-bold border-l-2 border-amber-500 shadow-xs')
+                      : (isCocaCola ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/10 border-l-2 border-transparent' : 'text-slate-400 hover:text-white hover:bg-white/5 border-l-2 border-transparent')
                   } ${isCollapsed ? 'justify-center px-0' : 'justify-between px-2.5'}`}
                 >
                   <div className={`flex items-center gap-2.5 min-w-0 ${isCollapsed ? 'justify-center w-full' : 'pr-2'}`}>
-                    <FolderOpen size={15} className={`shrink-0 ${isCatSelected ? 'text-amber-400' : 'text-slate-400 group-hover:text-amber-400'}`} />
+                    <CatIcon 
+                      size={15} 
+                      className={`shrink-0 ${
+                        isCatSelected 
+                          ? (isCocaCola ? 'text-red-400' : 'text-amber-400') 
+                          : (isCocaCola ? 'text-slate-400 group-hover:text-red-400' : 'text-slate-400 group-hover:text-amber-400')
+                      }`} 
+                    />
                     <span className={`truncate whitespace-nowrap overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
                       isCollapsed ? 'max-w-0 opacity-0 hidden' : 'max-w-full opacity-100'
                     }`}>
@@ -224,7 +235,7 @@ export default function Sidebar({
                     </span>
                   </div>
                   {!isCollapsed && (
-                    <ChevronRight size={13} className={`shrink-0 transition-transform ${isCatSelected ? 'text-amber-400 translate-x-0.5' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`} />
+                    <ChevronRight size={13} className={`shrink-0 transition-transform ${isCatSelected ? (isCocaCola ? 'text-red-400 translate-x-0.5' : 'text-amber-400 translate-x-0.5') : 'text-slate-500 opacity-0 group-hover:opacity-100'}`} />
                   )}
                 </button>
 

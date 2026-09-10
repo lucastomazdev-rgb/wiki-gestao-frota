@@ -5,6 +5,7 @@ import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import { Plus, Edit2, Trash2, BookOpen, FileText, AlertCircle, Check, ArrowLeft, Shield, HelpCircle, Sparkles, ChevronDown, ChevronUp, Book, Users, UserPlus, ShieldCheck, UserCheck, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ICON_MAP, AVAILABLE_ICON_NAMES } from '../utils/iconMap';
 
 export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUpdated }) {
   const toast = useToast();
@@ -83,7 +84,7 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
   const [categoryIcon, setCategoryIcon] = useState('BookOpen');
   const [showCategoryForm, setShowCategoryForm] = useState(false);
 
-  const availableIcons = ['BookOpen', 'Shield', 'Cpu', 'Wrench', 'FileText', 'AlertTriangle', 'TrendingUp', 'Download'];
+  const availableIcons = AVAILABLE_ICON_NAMES;
 
   const fetchData = async () => {
     setLoading(true);
@@ -782,12 +783,20 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                 <TableSkeleton rows={4} />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {categories.map(cat => (
-                    <div key={cat.id} className="p-5 bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-between hover:border-amber-500/40 transition-all">
-                      <div className="flex-1 truncate pr-4">
-                        <h4 className="text-sm font-semibold text-white">{cat.name}</h4>
-                        <span className="text-[11px] font-sans text-slate-400">Ícone: {cat.iconName}</span>
-                      </div>
+                  {categories.map(cat => {
+                    const CatIcon = ICON_MAP[cat.iconName] || BookOpen;
+                    const isCocaCola = cat.slug === 'processos-coca-cola' || cat.iconName === 'CocaCola' || cat.iconName === 'CocaColaBottle';
+                    return (
+                      <div key={cat.id} className="p-5 bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-between hover:border-amber-500/40 transition-all">
+                        <div className="flex items-center gap-3.5 flex-1 truncate pr-4">
+                          <div className={`p-2.5 rounded-xl border ${isCocaCola ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                            <CatIcon size={18} />
+                          </div>
+                          <div className="truncate">
+                            <h4 className="text-sm font-semibold text-white truncate">{cat.name}</h4>
+                            <span className="text-[11px] font-sans text-slate-400">Ícone: {cat.iconName}</span>
+                          </div>
+                        </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleEditCategory(cat)}
@@ -805,7 +814,8 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

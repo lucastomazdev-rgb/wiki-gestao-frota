@@ -4,9 +4,12 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import { 
   Building2, MapPin, Truck, Bike, Video, Layers,
-  Search, Plus, Edit2, Trash2, XCircle, Save, Loader2, ChevronLeft, ChevronRight 
+  Search, Plus, Edit2, Trash2, XCircle, Save, Loader2, ChevronLeft, ChevronRight,
+  Users, Star, MessageCircle
 } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import ModalResponsaveisUnidade from './gestao-solar/ModalResponsaveisUnidade';
+import { gerarLinkWhatsApp } from '../utils/telefone';
 import { z } from 'zod';
 import { useUnidadesLookup } from '../hooks/useLookups';
 
@@ -33,6 +36,17 @@ export default function GestaoUnidades({ veiculos }) {
   const [errosForm, setErrosForm] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [unidadeParaResponsaveis, setUnidadeParaResponsaveis] = useState(null);
+
+  // Mantém os dados da unidade selecionada no modal atualizados após mutações
+  useEffect(() => {
+    if (unidadeParaResponsaveis) {
+      const encontrada = unidades.find(u => u.id === unidadeParaResponsaveis.id);
+      if (encontrada) {
+        setUnidadeParaResponsaveis(encontrada);
+      }
+    }
+  }, [unidades]);
 
   const [paginaAtual, setPaginaAtual] = useState(1);
   const ITENS_POR_PAGINA = 12;
@@ -76,10 +90,17 @@ export default function GestaoUnidades({ veiculos }) {
         kpi: { cams, motos, vids }
       };
     }).filter(u => {
-      const search = busca.toLowerCase();
-      return String(u.nome_unidade || '').toLowerCase().includes(search) ||
-             String(u.cod_cliente || '').toLowerCase().includes(search) ||
-             String(u.razao_social || '').toLowerCase().includes(search);
+      const search = busca.toLowerCase().trim();
+      if (!search) return true;
+      const matchUnidade = String(u.nome_unidade || '').toLowerCase().includes(search) ||
+                           String(u.cod_cliente || '').toLowerCase().includes(search) ||
+                           String(u.razao_social || '').toLowerCase().includes(search);
+      const matchResponsavel = Array.isArray(u.responsaveis) && u.responsaveis.some(r =>
+        String(r.nome || '').toLowerCase().includes(search) ||
+        String(r.email || '').toLowerCase().includes(search) ||
+        String(r.telefone || '').toLowerCase().includes(search)
+      );
+      return matchUnidade || matchResponsavel;
     });
   }, [unidades, veiculos, busca]);
 
@@ -379,6 +400,109 @@ export default function GestaoUnidades({ veiculos }) {
                   </div>
                 </div>
               </div>
+
+              {/* Seção de Responsáveis da Unidade (1:N) */}
+              <div className="mt-3.5 pt-3 border-t border-slate-100/90">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Users size={12} className="text-teal-600" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Responsáveis ({Array.isArray(u.responsaveis) ? u.responsaveis.length : 0})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setUnidadeParaResponsaveis(u)}
+                    className="text-[10px] font-black text-teal-600 hover:text-teal-700 hover:underline uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {Array.isArray(u.responsaveis) && u.responsaveis.length > 0 ? 'Gerenciar' : '+ Adicionar'}
+                  </button>
+                </div>
+
+                {Array.isArray(u.responsaveis) && u.responsaveis.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {u.responsaveis.slice(0, 2).map((resp) => {
+                      const linkWhats = gerarLinkWhatsApp(resp.telefone);
+                      return (
+                        <div
+                          key={resp.id}
+                          className={`flex items-center justify-between p-2 rounded-xl border transition-all ${
+                            resp.principal
+                              ? 'bg-emerald-50/40 border-emerald-200/80'
+                              : 'bg-slate-50/80 hover:bg-teal-50/40 border-slate-200/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                resp.principal ? 'bg-emerald-600 text-white' : 'bg-teal-100 text-teal-700'
+                              }`}
+                            >
+                              {(resp.nome || 'R')[0].toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[11px] font-bold text-slate-800 truncate block max-w-[130px] sm:max-w-[160px]" title={resp.nome}>
+                                  {resp.nome}
+                                </span>
+                                {resp.principal && (
+                                  <span title="Responsável Principal" className="inline-flex items-center text-[9px] font-black text-emerald-700 bg-emerald-100 px-1 rounded">
+                                    <Star size={9} className="fill-emerald-600 text-emerald-600" />
+                                  </span>
+                                )}
+                              </div>
+                              {resp.telefone && (
+                                <span className="text-[10px] text-slate-400 font-medium block">
+                                  {resp.telefone}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {linkWhats && (
+                              <a
+                                href={linkWhats}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100/70 rounded-lg transition-all"
+                                title="Conversar no WhatsApp"
+                              >
+                                <MessageCircle size={13} className="fill-emerald-100" />
+                              </a>
+                            )}
+                            <button
+                              onClick={() => setUnidadeParaResponsaveis(u)}
+                              className="p-1 text-slate-400 hover:text-teal-600 rounded-lg transition-colors cursor-pointer"
+                              title="Ver detalhes"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {u.responsaveis.length > 2 && (
+                      <button
+                        onClick={() => setUnidadeParaResponsaveis(u)}
+                        className="w-full text-center py-1 text-[10px] font-bold text-slate-500 hover:text-teal-700 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        + {u.responsaveis.length - 2} outro(s) responsável(is)
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => setUnidadeParaResponsaveis(u)}
+                    className="text-center py-2.5 px-3 bg-slate-50/60 hover:bg-teal-50/40 rounded-xl border border-dashed border-slate-200 hover:border-teal-300 transition-all cursor-pointer group/add"
+                  >
+                    <span className="text-[10px] font-bold text-slate-400 group-hover/add:text-teal-700 flex items-center justify-center gap-1">
+                      <Plus size={12} /> Nenhum responsável cadastrado
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -439,6 +563,12 @@ export default function GestaoUnidades({ veiculos }) {
         confirmLabel="Sim, Excluir"
         onConfirm={excluirUnidade}
         onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ModalResponsaveisUnidade
+        isOpen={!!unidadeParaResponsaveis}
+        onClose={() => setUnidadeParaResponsaveis(null)}
+        unidade={unidadeParaResponsaveis}
       />
     </div>
   );

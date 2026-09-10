@@ -232,10 +232,13 @@ export default function createTarefasRouter(prisma, protect) {
       }
 
       const isAdmin = req.user.role === 'ADMIN';
-      if (!isAdmin && existing.criado_por !== req.user.id) {
+      const isCreator = existing.criado_por === req.user.id;
+      const isAssigned = existing.atribuido_a === req.user.id;
+
+      if (!isAdmin && !isCreator && !isAssigned) {
         return res.status(403).json({
           status: 'error',
-          message: 'Você só possui permissão para mover no Kanban demandas criadas por você.'
+          message: 'Você só possui permissão para mover no Kanban demandas criadas por você ou atribuídas a você.'
         });
       }
 

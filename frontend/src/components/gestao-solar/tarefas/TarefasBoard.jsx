@@ -15,7 +15,7 @@ import { CheckCircle2, Clock, Layers, Lock, MessageSquare, Trash2, User as UserI
 import { COLUMNS } from './constants';
 
 function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, usersList, currentTime }) {
-  const canDrag = isAdmin || task.criado_por === currentUserId;
+  const canDrag = isAdmin || task.criado_por === currentUserId || task.atribuido_a === currentUserId;
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,

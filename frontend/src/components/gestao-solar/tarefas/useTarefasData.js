@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import api from '../../../services/api';
@@ -7,6 +7,8 @@ import { COLUMNS, DEFAULT_NEW_TASK } from './constants';
 export function useTarefasData({ user, isAdmin }) {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState(null);
+  const dragSourceStatusRef = useRef(null);
+  const dragSourceTaskRef = useRef(null);
 
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
   const [isTaskDetailsModalOpen, setIsTaskDetailsModalOpen] = useState(false);
@@ -93,8 +95,12 @@ export function useTarefasData({ user, isAdmin }) {
   // 4. DRAG AND DROP: Manipulação local e persistência no backend
   // -------------------------------------------------------------------------
   const handleDragStart = useCallback((event) => {
-    setActiveId(event.active.id);
-  }, []);
+    const taskId = event.active.id;
+    setActiveId(taskId);
+    const task = tasks.find((t) => t.id === taskId);
+    dragSourceStatusRef.current = task?.status || null;
+    dragSourceTaskRef.current = task || null;
+  }, [tasks]);
 
   const handleDragOver = useCallback(
     (event) => {
@@ -127,29 +133,73 @@ export function useTarefasData({ user, isAdmin }) {
     async (event) => {
       const { active, over } = event;
       setActiveId(null);
-      if (!over) return;
+
+      const initialStatus = dragSourceStatusRef.current;
+      const initialTask = dragSourceTaskRef.current;
+      dragSourceStatusRef.current = null;
+      dragSourceTaskRef.current = null;
 
       const activeTaskId = active.id;
+
+      // Se soltou fora de qualquer droppable válido
+      if (!over) {
+        if (initialStatus) {
+          queryClient.setQueryData(['gestao-solar', 'tarefas'], (oldTasks) => {
+            if (!oldTasks) return [];
+            return oldTasks.map((t) => (t.id === activeTaskId ? { ...t, status: initialStatus } : t));
+          });
+        }
+        return;
+      }
+
       const overId = over.id;
+      const destinationStatus = COLUMNS.includes(overId)
+        ? overId
+        : tasks.find((t) => t.id === overId)?.status;
 
-      const activeTask = tasks.find((t) => t.id === activeTaskId);
-      const overStatus = COLUMNS.includes(overId) ? overId : tasks.find((t) => t.id === overId)?.status;
+      // Se não identificou coluna válida
+      if (!destinationStatus) {
+        if (initialStatus) {
+          queryClient.setQueryData(['gestao-solar', 'tarefas'], (oldTasks) => {
+            if (!oldTasks) return [];
+            return oldTasks.map((t) => (t.id === activeTaskId ? { ...t, status: initialStatus } : t));
+          });
+        }
+        return;
+      }
 
-      if (!activeTask || !overStatus) return;
+      // Se a coluna final for a mesma coluna original de partida, não há chamada de rede
+      if (initialStatus && destinationStatus === initialStatus) {
+        queryClient.setQueryData(['gestao-solar', 'tarefas'], (oldTasks) => {
+          if (!oldTasks) return [];
+          return oldTasks.map((t) => (t.id === activeTaskId ? { ...t, status: initialStatus } : t));
+        });
+        return;
+      }
 
-      // Se a coluna não mudou, nada a fazer
-      if (activeTask.status === overStatus) return;
+      // Atualização otimista no cache local
+      queryClient.setQueryData(['gestao-solar', 'tarefas'], (oldTasks) => {
+        if (!oldTasks) return [];
+        return oldTasks.map((t) => (t.id === activeTaskId ? { ...t, status: destinationStatus } : t));
+      });
 
       try {
-        await api.patch(`/gestao-solar/tarefas/${activeTaskId}/status`, { status: overStatus });
+        await api.patch(`/gestao-solar/tarefas/${activeTaskId}/status`, { status: destinationStatus });
 
-        if (overStatus === 'Concluído' && activeTask.status !== 'Concluído') {
-          toast.success(`Demanda "${activeTask.titulo}" concluída!`, { icon: '🎉' });
+        if (destinationStatus === 'Concluído' && initialStatus !== 'Concluído') {
+          toast.success(`Demanda "${initialTask?.titulo || 'Demanda'}" concluída!`, { icon: '🎉' });
         }
         queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
       } catch (err) {
         const errorMsg = err.response?.data?.message || 'Erro ao mover demanda no Kanban.';
         toast.error(errorMsg);
+        // Em caso de erro na requisição, reverte imediatamente para o status inicial
+        if (initialStatus) {
+          queryClient.setQueryData(['gestao-solar', 'tarefas'], (oldTasks) => {
+            if (!oldTasks) return [];
+            return oldTasks.map((t) => (t.id === activeTaskId ? { ...t, status: initialStatus } : t));
+          });
+        }
         queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
       }
     },

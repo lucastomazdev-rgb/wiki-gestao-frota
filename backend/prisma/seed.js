@@ -51,6 +51,21 @@ async function main() {
     }
   });
 
+  const catCocaCola = await prisma.category.upsert({
+    where: { slug: 'processos-coca-cola' },
+    update: {
+      name: 'Processos Coca Cola',
+      iconName: 'CocaCola',
+      description: 'Procedimentos operacionais, manuais técnicos e padrões de instalação da frota Coca-Cola.'
+    },
+    create: {
+      name: 'Processos Coca Cola',
+      slug: 'processos-coca-cola',
+      description: 'Procedimentos operacionais, manuais técnicos e padrões de instalação da frota Coca-Cola.',
+      iconName: 'CocaCola'
+    }
+  });
+
   console.log('✓ Categorias criadas/garantidas.');
 
   // 3. Criar Artigos de Exemplo (se não existirem)

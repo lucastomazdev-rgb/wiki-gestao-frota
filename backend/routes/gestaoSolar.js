@@ -562,7 +562,22 @@ export default function createGestaoSolarRouter(prisma, protect) {
           COUNT(i.id)::int as total_veiculos,
           COUNT(CASE WHEN UPPER(m.tipo_veiculo) IN ('CAMINHÃO', 'CAMINHAO') THEN 1 END)::int as cams,
           COUNT(CASE WHEN UPPER(m.tipo_veiculo) IN ('MOTO', 'MOTOCICLETA') THEN 1 END)::int as motos,
-          COUNT(CASE WHEN UPPER(m.tipo_veiculo) IN ('VÍDEO', 'VIDEO', 'CÂMERA', 'CAMERA', 'DASHCAM') THEN 1 END)::int as vids
+          COUNT(CASE WHEN UPPER(m.tipo_veiculo) IN ('VÍDEO', 'VIDEO', 'CÂMERA', 'CAMERA', 'DASHCAM') THEN 1 END)::int as vids,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object(
+                'id', r.id,
+                'nome', r.nome,
+                'telefone', r.telefone,
+                'email', r.email,
+                'principal', r.principal,
+                'criado_em', r.criado_em
+              ) ORDER BY r.principal DESC, r.nome ASC)
+              FROM public.unidade_responsaveis r
+              WHERE r.unidade_id = u.id
+            ),
+            '[]'::json
+          ) as responsaveis
         FROM public.unidades_clientes u
         LEFT JOIN public.instalacoes i ON i.unidade_id = u.id
         LEFT JOIN public.modelos_rastreadores m ON m.id = i.modelo_id
@@ -582,7 +597,8 @@ export default function createGestaoSolarRouter(prisma, protect) {
           cams: Number(r.cams || 0),
           motos: Number(r.motos || 0),
           vids: Number(r.vids || 0)
-        }
+        },
+        responsaveis: Array.isArray(r.responsaveis) ? r.responsaveis : []
       }));
 
       unidadesCache = { data: unidades, expiresAt: now + CACHE_TTL_MS };
@@ -643,6 +659,121 @@ export default function createGestaoSolarRouter(prisma, protect) {
       await prisma.unidades_clientes.delete({ where: { id } });
       invalidateLookupsCache();
       res.status(200).json({ mensagem: 'Unidade excluída com sucesso!' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // GESTÃO DE RESPONSÁVEIS POR UNIDADE (1:N)
+  // -------------------------------------------------------------------------
+
+  router.get('/unidades/:id/responsaveis', async (req, res, next) => {
+    try {
+      const unidadeId = parseInt(req.params.id, 10);
+      if (isNaN(unidadeId)) {
+        return res.status(400).json({ erro: 'ID da unidade inválido.' });
+      }
+
+      const responsaveis = await prisma.unidade_responsaveis.findMany({
+        where: { unidade_id: unidadeId },
+        orderBy: [{ principal: 'desc' }, { nome: 'asc' }]
+      });
+
+      res.status(200).json(responsaveis);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/unidades/:id/responsaveis', async (req, res, next) => {
+    try {
+      const unidadeId = parseInt(req.params.id, 10);
+      if (isNaN(unidadeId)) {
+        return res.status(400).json({ erro: 'ID da unidade inválido.' });
+      }
+
+      const schema = z.object({
+        nome: z.string().trim().min(3, 'Nome deve ter no mínimo 3 caracteres.'),
+        telefone: z.string().trim().optional().nullable().or(z.literal('')),
+        email: z.string().trim().email('E-mail inválido.').optional().nullable().or(z.literal('')),
+        principal: z.boolean().optional().default(false)
+      });
+
+      const { nome, telefone, email, principal } = schema.parse(req.body);
+
+      // Se for marcado como principal, desmarca qualquer outro da mesma unidade
+      if (principal) {
+        await prisma.unidade_responsaveis.updateMany({
+          where: { unidade_id: unidadeId, principal: true },
+          data: { principal: false }
+        });
+      }
+
+      const novo = await prisma.unidade_responsaveis.create({
+        data: {
+          unidade_id: unidadeId,
+          nome,
+          telefone: telefone ? telefone.trim() : null,
+          email: email ? email.trim().toLowerCase() : null,
+          principal: Boolean(principal)
+        }
+      });
+
+      invalidateLookupsCache();
+      res.status(201).json(novo);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.put('/unidades/responsaveis/:id', async (req, res, next) => {
+    try {
+      const id = req.params.id;
+      const schema = z.object({
+        nome: z.string().trim().min(3, 'Nome deve ter no mínimo 3 caracteres.').optional(),
+        telefone: z.string().trim().optional().nullable().or(z.literal('')),
+        email: z.string().trim().email('E-mail inválido.').optional().nullable().or(z.literal('')),
+        principal: z.boolean().optional()
+      });
+
+      const dados = schema.parse(req.body);
+
+      const atual = await prisma.unidade_responsaveis.findUnique({ where: { id } });
+      if (!atual) {
+        return res.status(404).json({ erro: 'Responsável não encontrado.' });
+      }
+
+      if (dados.principal) {
+        await prisma.unidade_responsaveis.updateMany({
+          where: { unidade_id: atual.unidade_id, principal: true, NOT: { id } },
+          data: { principal: false }
+        });
+      }
+
+      const atualizado = await prisma.unidade_responsaveis.update({
+        where: { id },
+        data: {
+          nome: dados.nome,
+          telefone: dados.telefone !== undefined ? (dados.telefone ? dados.telefone.trim() : null) : undefined,
+          email: dados.email !== undefined ? (dados.email ? dados.email.trim().toLowerCase() : null) : undefined,
+          principal: dados.principal !== undefined ? dados.principal : undefined
+        }
+      });
+
+      invalidateLookupsCache();
+      res.status(200).json(atualizado);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/unidades/responsaveis/:id', async (req, res, next) => {
+    try {
+      const id = req.params.id;
+      await prisma.unidade_responsaveis.delete({ where: { id } });
+      invalidateLookupsCache();
+      res.status(200).json({ mensagem: 'Responsável removido com sucesso!' });
     } catch (error) {
       next(error);
     }
