@@ -285,6 +285,7 @@ model tarefas {
   atribuido_a String?              @db.Text
   ordem       Int                  @default(0)
   prioridade  String               @default("Normal") @db.VarChar(30)
+  categoria   String?              @db.VarChar(50)
   created_at  DateTime             @default(now()) @db.Timestamptz(6)
 
   criador     User                 @relation("TarefasCriadas", fields: [criado_por], references: [id], onDelete: Restrict)
@@ -294,6 +295,7 @@ model tarefas {
   @@index([criado_por], map: "idx_tarefas_criado_por")
   @@index([atribuido_a], map: "idx_tarefas_atribuido_a")
   @@index([status], map: "idx_tarefas_status")
+  @@index([categoria], map: "idx_tarefas_categoria")
 }
 
 model tarefa_comentarios {

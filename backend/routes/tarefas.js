@@ -11,13 +11,15 @@ const createTaskSchema = z.object({
   descricao: z.string().trim().optional().nullable(),
   status: z.enum(VALID_STATUSES).optional().default('Demandas'),
   prioridade: z.enum(VALID_PRIORITIES).optional().default('Normal'),
+  categoria: z.string().trim().max(50, 'Categoria deve ter no máximo 50 caracteres.').optional().nullable(),
   atribuido_a: z.string().uuid().optional().nullable()
 });
 
 const updateTaskSchema = z.object({
   titulo: z.string().trim().min(1, 'Título é obrigatório.').max(255).optional(),
   descricao: z.string().trim().optional().nullable(),
-  prioridade: z.enum(VALID_PRIORITIES).optional()
+  prioridade: z.enum(VALID_PRIORITIES).optional(),
+  categoria: z.string().trim().max(50, 'Categoria deve ter no máximo 50 caracteres.').optional().nullable()
 });
 
 const updateStatusSchema = z.object({
@@ -73,6 +75,7 @@ export default function createTarefasRouter(prisma, protect) {
         responsavel: t.responsavel,
         ordem: t.ordem,
         prioridade: t.prioridade,
+        categoria: t.categoria,
         created_at: t.created_at,
         commentCount: t._count.comentarios
       }));
@@ -135,6 +138,7 @@ export default function createTarefasRouter(prisma, protect) {
           descricao: parsed.descricao || null,
           status: parsed.status,
           prioridade: parsed.prioridade,
+          categoria: parsed.categoria || null,
           criado_por: req.user.id,
           atribuido_a
         },
@@ -154,7 +158,7 @@ export default function createTarefasRouter(prisma, protect) {
       recordAuditEvent({
         action: 'CREATE_TAREFA',
         actor: { id: req.user.id, email: req.user.email, role: req.user.role },
-        target: { type: 'tarefa', id: created.id, titulo: created.titulo, atribuido_a }
+        target: { type: 'tarefa', id: created.id, titulo: created.titulo, atribuido_a, categoria: created.categoria }
       });
 
       return res.status(201).json({
@@ -196,7 +200,8 @@ export default function createTarefasRouter(prisma, protect) {
         data: {
           ...(parsed.titulo !== undefined && { titulo: parsed.titulo }),
           ...(parsed.descricao !== undefined && { descricao: parsed.descricao }),
-          ...(parsed.prioridade !== undefined && { prioridade: parsed.prioridade })
+          ...(parsed.prioridade !== undefined && { prioridade: parsed.prioridade }),
+          ...(parsed.categoria !== undefined && { categoria: parsed.categoria || null })
         },
         include: {
           criador: { select: { id: true, name: true, email: true } },

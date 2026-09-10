@@ -11,8 +11,34 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CheckCircle2, Clock, Layers, Lock, MessageSquare, Trash2, User as UserIcon } from 'lucide-react';
+import { CheckCircle2, Clock, Filter, Layers, Lock, MessageSquare, Sliders, Tag, Trash2, User as UserIcon, Wrench } from 'lucide-react';
 import { COLUMNS } from './constants';
+
+export function getCategoryMeta(categoria) {
+  if (!categoria) return null;
+  if (categoria === 'Configuração/Perfil') {
+    return {
+      label: 'Configuração / Perfil',
+      badgeClass: 'bg-sky-50 text-sky-700 border-sky-200/90 hover:bg-sky-100/70',
+      icon: Sliders,
+      hoverBorder: 'hover:border-sky-300'
+    };
+  }
+  if (categoria === 'Manutenção') {
+    return {
+      label: 'Manutenção',
+      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200/90 hover:bg-amber-100/70',
+      icon: Wrench,
+      hoverBorder: 'hover:border-amber-300'
+    };
+  }
+  return {
+    label: categoria,
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200/90 hover:bg-slate-200/70',
+    icon: Tag,
+    hoverBorder: 'hover:border-slate-400'
+  };
+}
 
 function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, usersList, currentTime }) {
   const canDrag = isAdmin || task.criado_por === currentUserId || task.atribuido_a === currentUserId;
@@ -42,6 +68,8 @@ function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, use
   const isCreatedByMe = task.criado_por === currentUserId;
   const assignedUser = task.responsavel || usersList?.find((user) => user.id === task.atribuido_a);
   const creatorUser = task.criador || usersList?.find((user) => user.id === task.criado_por);
+  const categoryMeta = getCategoryMeta(task.categoria);
+  const CategoryIcon = categoryMeta?.icon;
 
   const getExpirationData = () => {
     if (!task.created_at || task.status === 'Concluído') return null;
@@ -92,11 +120,23 @@ function SortableTaskCard({ task, onClick, onDelete, isAdmin, currentUserId, use
       } ${
         isAssignedToMe
           ? 'bg-gradient-to-br from-teal-50/40 to-white border border-teal-400 shadow-md shadow-teal-500/10 hover:border-teal-500'
-          : 'bg-white border border-slate-200/70 shadow-xs hover:shadow-md hover:border-teal-300'
+          : categoryMeta
+            ? `bg-white border border-slate-200/80 shadow-xs hover:shadow-md ${categoryMeta.hoverBorder}`
+            : 'bg-white border border-slate-200/70 shadow-xs hover:shadow-md hover:border-teal-300'
       }`}
     >
       {isAssignedToMe && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-teal-500 rounded-l-2xl"></div>}
       
+      {/* Badge de Categoria (quando presente) */}
+      {categoryMeta && (
+        <div className="mb-2 pl-0.5 flex items-center">
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border shadow-2xs transition-colors ${categoryMeta.badgeClass}`}>
+            <CategoryIcon size={10} strokeWidth={2.4} />
+            <span>{categoryMeta.label}</span>
+          </span>
+        </div>
+      )}
+
       <div className="flex justify-between items-start mb-2 pl-0.5">
         <h4 className="font-black text-slate-800 text-[13px] tracking-tight leading-snug pr-14 break-words">
           {task.titulo}
@@ -262,7 +302,10 @@ export default function TarefasBoard({
   activeTask,
   onDragStart,
   onDragOver,
-  onDragEnd
+  onDragEnd,
+  categoryFilter,
+  onCategoryFilterChange,
+  categoryCounts
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -270,46 +313,133 @@ export default function TarefasBoard({
   );
 
   return (
-    <div className="flex-grow overflow-x-auto pb-8 -mx-4 px-4 lg:mx-0 lg:px-0 custom-scrollbar-horizontal">
-      <div className="flex gap-4 min-h-[520px] h-full min-w-[1100px] lg:min-w-full items-start px-1 py-1">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={onDragStart}
-          onDragOver={onDragOver}
-          onDragEnd={onDragEnd}
-        >
-          {COLUMNS.map((columnId) => (
-            <Column
-              key={columnId}
-              id={columnId}
-              title={columnId}
-              tasks={columnsData[columnId] || []}
-              onTaskClick={onTaskClick}
-              onDeleteTask={onRequestDelete}
-              isAdmin={isAdmin}
-              currentUserId={currentUserId}
-              usersList={usersList}
-              currentTime={currentTime}
-            />
-          ))}
+    <div className="flex flex-col flex-grow w-full">
+      {/* Barra de Filtro de Categorias */}
+      {categoryCounts && onCategoryFilterChange && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-1">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full custom-scrollbar">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mr-1 flex items-center gap-1.5 shrink-0">
+              <Filter size={12} className="text-slate-400" />
+              Categorias:
+            </span>
 
-          <DragOverlay>
-            {activeTask ? (
-              <div className="transform scale-105 rotate-1 opacity-95 shadow-2xl cursor-grabbing">
-                <SortableTaskCard
-                  task={activeTask}
-                  onClick={() => {}}
-                  onDelete={() => {}}
-                  isAdmin={isAdmin}
-                  currentUserId={currentUserId}
-                  usersList={usersList}
-                  currentTime={currentTime}
-                />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+            <button
+              type="button"
+              onClick={() => onCategoryFilterChange('ALL')}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                categoryFilter === 'ALL'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
+              }`}
+            >
+              <span>Todas</span>
+              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                categoryFilter === 'ALL' ? 'bg-slate-700 text-slate-100' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {categoryCounts.ALL || 0}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onCategoryFilterChange('Configuração/Perfil')}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                categoryFilter === 'Configuração/Perfil'
+                  ? 'bg-sky-600 text-white shadow-xs shadow-sky-600/20'
+                  : 'bg-white text-sky-700 border border-sky-200/80 hover:bg-sky-50/70'
+              }`}
+            >
+              <Sliders size={11} strokeWidth={2.4} />
+              <span>Configuração / Perfil</span>
+              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                categoryFilter === 'Configuração/Perfil' ? 'bg-sky-700 text-sky-100' : 'bg-sky-100 text-sky-700'
+              }`}>
+                {categoryCounts['Configuração/Perfil'] || 0}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onCategoryFilterChange('Manutenção')}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                categoryFilter === 'Manutenção'
+                  ? 'bg-amber-600 text-white shadow-xs shadow-amber-600/20'
+                  : 'bg-white text-amber-800 border border-amber-200/80 hover:bg-amber-50/70'
+              }`}
+            >
+              <Wrench size={11} strokeWidth={2.4} />
+              <span>Manutenção</span>
+              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                categoryFilter === 'Manutenção' ? 'bg-amber-700 text-amber-100' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {categoryCounts['Manutenção'] || 0}
+              </span>
+            </button>
+
+            {categoryCounts.NONE > 0 && (
+              <button
+                type="button"
+                onClick={() => onCategoryFilterChange('NONE')}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  categoryFilter === 'NONE'
+                    ? 'bg-slate-600 text-white shadow-xs'
+                    : 'bg-white text-slate-500 border border-slate-200/80 hover:bg-slate-50'
+                }`}
+              >
+                <span>Sem Categoria</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold ${
+                  categoryFilter === 'NONE' ? 'bg-slate-500 text-slate-100' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {categoryCounts.NONE}
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Quadro Kanban com rolagem horizontal se necessário */}
+      <div className="flex-grow overflow-x-auto pb-8 -mx-4 px-4 lg:mx-0 lg:px-0 custom-scrollbar-horizontal">
+        <div className="flex gap-4 min-h-[520px] h-full min-w-[1100px] lg:min-w-full items-start px-1 py-1">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDragEnd={onDragEnd}
+          >
+            {COLUMNS.map((columnId) => (
+              <Column
+                key={columnId}
+                id={columnId}
+                title={columnId}
+                tasks={columnsData[columnId] || []}
+                onTaskClick={onTaskClick}
+                onDeleteTask={onRequestDelete}
+                isAdmin={isAdmin}
+                currentUserId={currentUserId}
+                usersList={usersList}
+                currentTime={currentTime}
+              />
+            ))}
+
+            <DragOverlay>
+              {activeTask ? (
+                <div className="transform scale-105 rotate-1 opacity-95 shadow-2xl cursor-grabbing">
+                  <SortableTaskCard
+                    task={activeTask}
+                    onClick={() => {}}
+                    onDelete={() => {}}
+                    isAdmin={isAdmin}
+                    currentUserId={currentUserId}
+                    usersList={usersList}
+                    currentTime={currentTime}
+                  />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </div>
       </div>
     </div>
   );

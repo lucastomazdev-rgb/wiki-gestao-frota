@@ -23,6 +23,7 @@ export function useTarefasData({ user, isAdmin }) {
   const [timeOffset, setTimeOffset] = useState(0);
 
   const [newTask, setNewTask] = useState(DEFAULT_NEW_TASK);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
@@ -223,7 +224,8 @@ export function useTarefasData({ user, isAdmin }) {
           titulo: newTask.titulo.trim(),
           descricao: newTask.descricao?.trim() || null,
           status: newTask.status || 'Demandas',
-          prioridade: newTask.prioridade || 'Normal'
+          prioridade: newTask.prioridade || 'Normal',
+          categoria: newTask.categoria?.trim() || null
         };
 
         // Apenas ADM pode atribuir na criação
@@ -302,6 +304,28 @@ export function useTarefasData({ user, isAdmin }) {
       }
     },
     [isAdmin, queryClient]
+  );
+
+  // -------------------------------------------------------------------------
+  // 7.1. ATUALIZAÇÃO DE CATEGORIA
+  // -------------------------------------------------------------------------
+  const handleUpdateCategory = useCallback(
+    async (taskId, categoria) => {
+      try {
+        const response = await api.put(`/gestao-solar/tarefas/${taskId}`, {
+          categoria: categoria || null
+        });
+
+        toast.success('Categoria atualizada!');
+        const updatedCat = response.data?.data?.categoria ?? (categoria || null);
+        setSelectedTask((prev) => (prev ? { ...prev, categoria: updatedCat } : prev));
+        queryClient.invalidateQueries({ queryKey: ['gestao-solar', 'tarefas'] });
+      } catch (err) {
+        const errorMsg = err.response?.data?.message || 'Erro ao atualizar categoria.';
+        toast.error(errorMsg);
+      }
+    },
+    [queryClient]
   );
 
   // -------------------------------------------------------------------------
@@ -397,6 +421,9 @@ export function useTarefasData({ user, isAdmin }) {
     handleDragOver,
     handleDragEnd,
     handleCreateTask,
+    handleUpdateCategory,
+    selectedCategoryFilter,
+    setSelectedCategoryFilter,
     openDeleteModal,
     closeDeleteModal,
     handleDeleteTask,

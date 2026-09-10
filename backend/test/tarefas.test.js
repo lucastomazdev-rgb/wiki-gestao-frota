@@ -303,3 +303,81 @@ test('Tarefas - Comentários são liberados para todos com acesso a Gestão Sola
     assert.equal(commentCreated.comentario, 'Observação técnica do veículo realizada.');
   });
 });
+
+test('Tarefas - Criação e Edição de Categoria', async () => {
+  const user = {
+    id: 'user-category-tester',
+    email: 'tester@corpvs.com.br',
+    role: 'USER',
+    can_access_gestao_solar: true
+  };
+
+  let capturedCreate = null;
+  let capturedUpdate = null;
+
+  const mockPrisma = {
+    tarefas: {
+      create: async ({ data }) => {
+        capturedCreate = data;
+        return {
+          id: 'task-cat-1',
+          ...data,
+          created_at: new Date()
+        };
+      },
+      findUnique: async () => ({
+        id: 'task-cat-1',
+        titulo: 'Tarefa com Categoria',
+        criado_por: user.id
+      }),
+      update: async ({ data }) => {
+        capturedUpdate = data;
+        return {
+          id: 'task-cat-1',
+          titulo: 'Tarefa Atualizada',
+          ...data,
+          _count: { comentarios: 0 }
+        };
+      }
+    }
+  };
+
+  const app = createTestApp({ user, prisma: mockPrisma });
+
+  await withServer(app, async (baseUrl) => {
+    // 1. Criar tarefa com categoria "Configuração/Perfil"
+    const resCreate = await fetch(`${baseUrl}/tarefas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        titulo: 'Demanda de Perfil',
+        categoria: 'Configuração/Perfil'
+      })
+    });
+    assert.equal(resCreate.status, 201);
+    assert.equal(capturedCreate.categoria, 'Configuração/Perfil');
+
+    // 2. Atualizar categoria para "Manutenção"
+    const resUpdate = await fetch(`${baseUrl}/tarefas/task-cat-1`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        categoria: 'Manutenção'
+      })
+    });
+    assert.equal(resUpdate.status, 200);
+    assert.equal(capturedUpdate.categoria, 'Manutenção');
+
+    // 3. Atualizar categoria para null (remover categoria)
+    const resClear = await fetch(`${baseUrl}/tarefas/task-cat-1`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        categoria: null
+      })
+    });
+    assert.equal(resClear.status, 200);
+    assert.equal(capturedUpdate.categoria, null);
+  });
+});
+
