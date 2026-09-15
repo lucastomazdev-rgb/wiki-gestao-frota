@@ -106,11 +106,18 @@ export default function createGestaoSolarRouter(prisma, protect) {
   router.get('/instalacoes', async (req, res, next) => {
     try {
       const page = Math.max(1, parseInt(req.query.page) || 1);
-      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+      const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 20));
       const paginated = req.query.paginated === 'true' || req.query.paginated === true;
-      const { placa, unidade, uf, tipo, operacao } = req.query;
+      const { placa, unidade, uf, tipo, operacao, unidade_id } = req.query;
 
       const where = {};
+
+      if (unidade_id) {
+        const parsedUnidadeId = parseInt(unidade_id, 10);
+        if (Number.isInteger(parsedUnidadeId)) {
+          where.unidade_id = parsedUnidadeId;
+        }
+      }
 
       if (placa && placa.trim()) {
         where.placa = { contains: placa.trim(), mode: 'insensitive' };

@@ -58,6 +58,7 @@ export default function TabelaVeiculos({ avisarMudanca }) {
     placasSelecionadas,
     setPlacasSelecionadas,
     transferindo,
+    carregandoOrigem,
     filtroPlacaTransfer,
     setFiltroPlacaTransfer,
     filtroTipoTransfer,
@@ -230,6 +231,7 @@ export default function TabelaVeiculos({ avisarMudanca }) {
             setFiltroTipoTransfer={setFiltroTipoTransfer}
             togglePlaca={togglePlaca}
             placasOrigem={placasOrigem}
+            carregandoOrigem={carregandoOrigem}
             onExecutarTransfer={() => handleExecutarTransfer({ placasFiltradas })}
           />
 

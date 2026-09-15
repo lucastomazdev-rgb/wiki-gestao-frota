@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowRight, ArrowRightLeft, Check, Loader2, Search, Truck, X } from 'lucide-react';
 
 export default function TabelaVeiculosTransferModal({
   isOpen,
   transferindo,
+  carregandoOrigem,
   setIsTransferOpen,
   unidadesLista,
   unidadeOrigem,
@@ -23,6 +24,43 @@ export default function TabelaVeiculosTransferModal({
   placasOrigem,
   onExecutarTransfer
 }) {
+  const [limiteOrigem, setLimiteOrigem] = useState(80);
+  const [limiteDestino, setLimiteDestino] = useState(80);
+
+  useEffect(() => {
+    setLimiteOrigem(80);
+  }, [unidadeOrigem, filtroPlacaTransfer, filtroTipoTransfer]);
+
+  useEffect(() => {
+    setLimiteDestino(80);
+  }, [unidadeOrigem, unidadeDestino]);
+
+  const placasVisiveis = useMemo(() => {
+    return placasFiltradas.slice(0, limiteOrigem);
+  }, [placasFiltradas, limiteOrigem]);
+
+  const selecionadasList = useMemo(() => {
+    return placasOrigem.filter((v) => placasSelecionadas.has(v.id));
+  }, [placasOrigem, placasSelecionadas]);
+
+  const selecionadasVisiveis = useMemo(() => {
+    return selecionadasList.slice(0, limiteDestino);
+  }, [selecionadasList, limiteDestino]);
+
+  const handleScrollOrigem = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 60 && limiteOrigem < placasFiltradas.length) {
+      setLimiteOrigem((prev) => Math.min(prev + 60, placasFiltradas.length));
+    }
+  };
+
+  const handleScrollDestino = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 60 && limiteDestino < selecionadasList.length) {
+      setLimiteDestino((prev) => Math.min(prev + 60, selecionadasList.length));
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -132,8 +170,16 @@ export default function TabelaVeiculosTransferModal({
                   </div>
                 )}
               </div>
-              <div className="max-h-[320px] overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                {!unidadeOrigem ? (
+              <div
+                onScroll={handleScrollOrigem}
+                className="max-h-[320px] overflow-y-auto p-3 space-y-2 custom-scrollbar"
+              >
+                {carregandoOrigem ? (
+                  <div className="text-center py-12 text-slate-400">
+                    <Loader2 size={32} className="mx-auto mb-3 text-amber-500 animate-spin" />
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Carregando placas da unidade...</p>
+                  </div>
+                ) : !unidadeOrigem ? (
                   <div className="text-center py-12 text-slate-400">
                     <ArrowRightLeft size={32} className="mx-auto mb-3 opacity-30" />
                     <p className="text-xs font-bold uppercase tracking-widest">Selecione uma unidade de origem</p>
@@ -144,31 +190,42 @@ export default function TabelaVeiculosTransferModal({
                     <p className="text-xs font-bold uppercase tracking-widest">Nenhum veículo encontrado</p>
                   </div>
                 ) : (
-                  placasFiltradas.map((v) => {
-                    const sel = placasSelecionadas.has(v.id);
-                    return (
+                  <>
+                    {placasVisiveis.map((v) => {
+                      const sel = placasSelecionadas.has(v.id);
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => togglePlaca(v.id)}
+                          className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left group ${
+                            sel
+                              ? 'bg-amber-100 border-amber-300 shadow-sm'
+                              : 'bg-white border-slate-200/70 hover:border-amber-200 hover:bg-amber-50/50'
+                          }`}
+                        >
+                          <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                            sel ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300 group-hover:border-amber-400'
+                          }`}>
+                            {sel && <Check size={14} strokeWidth={3} />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-extrabold text-slate-800 text-sm tracking-wider">{v.placa}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold ml-2 truncate">{v.modelos_rastreadores?.tipo_veiculo}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 flex-shrink-0 hidden sm:block">{v.modulo}</span>
+                        </button>
+                      );
+                    })}
+                    {placasFiltradas.length > limiteOrigem && (
                       <button
-                        key={v.id}
-                        onClick={() => togglePlaca(v.id)}
-                        className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left group ${
-                          sel
-                            ? 'bg-amber-100 border-amber-300 shadow-sm'
-                            : 'bg-white border-slate-200/70 hover:border-amber-200 hover:bg-amber-50/50'
-                        }`}
+                        type="button"
+                        onClick={() => setLimiteOrigem((prev) => Math.min(prev + 80, placasFiltradas.length))}
+                        className="w-full py-2 text-center text-[11px] font-bold text-amber-700 bg-amber-100/60 hover:bg-amber-100 rounded-xl transition-colors border border-amber-200 mt-2"
                       >
-                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                          sel ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300 group-hover:border-amber-400'
-                        }`}>
-                          {sel && <Check size={14} strokeWidth={3} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="font-extrabold text-slate-800 text-sm tracking-wider">{v.placa}</span>
-                          <span className="text-[10px] text-slate-400 font-semibold ml-2 truncate">{v.modelos_rastreadores?.tipo_veiculo}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 flex-shrink-0 hidden sm:block">{v.modulo}</span>
+                        Exibindo {placasVisiveis.length} de {placasFiltradas.length}. Role ou clique para carregar mais...
                       </button>
-                    );
-                  })
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -180,25 +237,39 @@ export default function TabelaVeiculosTransferModal({
                   {unidadeDestino ? (nomeUnidadeDestino || 'Destino') : 'Aguardando seleção do destino'}
                 </p>
               </div>
-              <div className="max-h-[320px] overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                {placasSelecionadas.size === 0 ? (
+              <div
+                onScroll={handleScrollDestino}
+                className="max-h-[320px] overflow-y-auto p-3 space-y-2 custom-scrollbar"
+              >
+                {selecionadasList.length === 0 ? (
                   <div className="text-center py-12 text-slate-400">
                     <Check size={32} className="mx-auto mb-3 opacity-30" />
                     <p className="text-xs font-bold uppercase tracking-widest">Selecione placas à esquerda</p>
                     <p className="text-[10px] text-slate-400 mt-1">Elas aparecerão aqui para confirmação</p>
                   </div>
                 ) : (
-                  placasOrigem.filter((v) => placasSelecionadas.has(v.id)).map((v) => (
-                    <div key={v.id} className="flex items-center gap-3 p-3.5 rounded-xl bg-teal-100/50 border-2 border-teal-200 text-left">
-                      <div className="w-6 h-6 rounded-lg bg-teal-500 border-2 border-teal-500 text-white flex items-center justify-center flex-shrink-0">
-                        <ArrowRight size={14} strokeWidth={3} />
+                  <>
+                    {selecionadasVisiveis.map((v) => (
+                      <div key={v.id} className="flex items-center gap-3 p-3.5 rounded-xl bg-teal-100/50 border-2 border-teal-200 text-left">
+                        <div className="w-6 h-6 rounded-lg bg-teal-500 border-2 border-teal-500 text-white flex items-center justify-center flex-shrink-0">
+                          <ArrowRight size={14} strokeWidth={3} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-extrabold text-slate-800 text-sm tracking-wider">{v.placa}</span>
+                          <span className="text-[10px] text-teal-600 font-bold ml-2">→ {nomeUnidadeDestino || '...'}</span>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-extrabold text-slate-800 text-sm tracking-wider">{v.placa}</span>
-                        <span className="text-[10px] text-teal-600 font-bold ml-2">→ {nomeUnidadeDestino || '...'}</span>
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                    {selecionadasList.length > limiteDestino && (
+                      <button
+                        type="button"
+                        onClick={() => setLimiteDestino((prev) => Math.min(prev + 80, selecionadasList.length))}
+                        className="w-full py-2 text-center text-[11px] font-bold text-teal-700 bg-teal-100/60 hover:bg-teal-100 rounded-xl transition-colors border border-teal-200 mt-2"
+                      >
+                        Exibindo {selecionadasVisiveis.length} de {selecionadasList.length}. Role ou clique para ver mais...
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>

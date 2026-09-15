@@ -74,6 +74,7 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
   const [placasOrigem, setPlacasOrigem] = useState([]);
   const [placasSelecionadas, setPlacasSelecionadas] = useState(new Set());
   const [transferindo, setTransferindo] = useState(false);
+  const [carregandoOrigem, setCarregandoOrigem] = useState(false);
   const [filtroPlacaTransfer, setFiltroPlacaTransfer] = useState('');
   const [filtroTipoTransfer, setFiltroTipoTransfer] = useState('');
 
@@ -215,6 +216,7 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
     setPlacasSelecionadas(new Set());
     setFiltroPlacaTransfer('');
     setFiltroTipoTransfer('');
+    setCarregandoOrigem(false);
     setIsTransferOpen(true);
   };
 
@@ -223,20 +225,27 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
     setPlacasSelecionadas(new Set());
     if (!unidadeId) {
       setPlacasOrigem([]);
+      setCarregandoOrigem(false);
       return;
     }
+    setCarregandoOrigem(true);
     try {
       const resposta = await api.get('/instalacoes', {
         params: {
-          paginated: true,
-          page: 1,
-          limit: 100,
+          paginated: false,
           unidade_id: unidadeId
         }
       });
-      setPlacasOrigem(Array.isArray(resposta.data?.data) ? resposta.data.data : []);
-    } catch {
+      const lista = Array.isArray(resposta.data)
+        ? resposta.data
+        : (Array.isArray(resposta.data?.data) ? resposta.data.data : []);
+      setPlacasOrigem(lista);
+    } catch (error) {
+      console.error('Erro ao carregar veículos da unidade:', error);
       setPlacasOrigem([]);
+      toast.error('Erro ao buscar veículos da unidade selecionada.');
+    } finally {
+      setCarregandoOrigem(false);
     }
   };
 
@@ -253,28 +262,38 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
       toast.error('Selecione ao menos uma placa e a unidade de destino.');
       return;
     }
-    if (unidadeOrigem === unidadeDestino) {
+    if (String(unidadeOrigem) === String(unidadeDestino)) {
       toast.error('A unidade de destino deve ser diferente da origem.');
       return;
     }
     setTransferindo(true);
     const toastId = toast.loading(`Transferindo ${placasSelecionadas.size} veículo(s)...`);
     try {
-      const promises = Array.from(placasSelecionadas).map((id) => {
-        const veiculo = veiculos.find((item) => item.id === id);
-        return api.put(`/instalacoes/${id}`, {
-          placa: veiculo?.placa,
-          unidade_id: unidadeDestino
-        });
+      const placasParaTransferir = placasOrigem
+        .filter((item) => placasSelecionadas.has(item.id))
+        .map((item) => item.placa)
+        .filter(Boolean);
+
+      if (placasParaTransferir.length === 0) {
+        toast.error('Nenhuma placa válida selecionada para transferência.', { id: toastId });
+        return;
+      }
+
+      const response = await api.post('/instalacoes/transferir', {
+        unidade_origem_id: unidadeOrigem ? parseInt(unidadeOrigem, 10) : undefined,
+        unidade_destino_id: parseInt(unidadeDestino, 10),
+        placas: placasParaTransferir
       });
-      await Promise.all(promises);
+
+      const qtdTransferida = response.data?.transferidos ?? placasParaTransferir.length;
       const nomeDestino = unidadesLista.find((item) => String(item.id) === String(unidadeDestino))?.nome_unidade || 'Nova Unidade';
-      toast.success(`${placasSelecionadas.size} veículo(s) transferido(s) para ${nomeDestino}!`, { id: toastId });
+      toast.success(`${qtdTransferida} veículo(s) transferido(s) para ${nomeDestino}!`, { id: toastId });
       setIsTransferOpen(false);
       carregarVeiculosSync();
       if (avisarMudanca) avisarMudanca();
-    } catch {
-      toast.error('Erro ao transferir. Verifique a conexão.', { id: toastId });
+    } catch (err) {
+      const msg = err?.response?.data?.erro || 'Erro ao transferir. Verifique a conexão.';
+      toast.error(msg, { id: toastId });
     } finally {
       setTransferindo(false);
     }
@@ -321,6 +340,7 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
     placasSelecionadas,
     setPlacasSelecionadas,
     transferindo,
+    carregandoOrigem,
     filtroPlacaTransfer,
     setFiltroPlacaTransfer,
     filtroTipoTransfer,
