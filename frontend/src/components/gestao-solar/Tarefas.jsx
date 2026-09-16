@@ -509,22 +509,27 @@ export default function Tarefas() {
                     </div>
 
                     {/* Formulário para novo comentário */}
-                    <form onSubmit={handleAddComment} className="flex gap-2.5 bg-slate-50 p-2 rounded-2xl border border-slate-200 focus-within:bg-white focus-within:border-teal-400 transition-all">
-                      <input 
-                        type="text" 
+                    <form onSubmit={handleAddComment} className="flex flex-col gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200 focus-within:bg-white focus-within:border-teal-400 transition-all">
+                      <textarea 
                         value={newComment}
                         onChange={e => setNewComment(e.target.value)}
                         placeholder="Escreva uma observação ou comentário sobre a demanda..."
-                        className="flex-1 bg-transparent px-3 py-2 text-xs font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                        rows={2}
+                        className="w-full bg-transparent px-2 py-1 text-xs font-medium text-slate-700 outline-none placeholder:text-slate-400 resize-none min-h-[48px] custom-scrollbar"
                       />
-                      <button 
-                        type="submit"
-                        disabled={!newComment.trim()}
-                        className="px-4 py-2 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-teal-700 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <span>Enviar</span>
-                        <Send size={12} />
-                      </button>
+                      <div className="flex items-center justify-between border-t border-slate-200/60 pt-2 px-1">
+                        <span className="text-[10px] text-slate-400 font-medium select-none">
+                          Pressione <kbd className="px-1.5 py-0.5 bg-slate-200/70 rounded text-[9px] font-bold text-slate-600">Enter</kbd> para pular linha
+                        </span>
+                        <button 
+                          type="submit"
+                          disabled={!newComment.trim()}
+                          className="px-4 py-2 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-teal-700 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <span>Enviar</span>
+                          <Send size={12} />
+                        </button>
+                      </div>
                     </form>
                   </div>
                 </div>
