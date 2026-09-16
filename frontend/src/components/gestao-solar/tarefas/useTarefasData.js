@@ -25,6 +25,8 @@ export function useTarefasData({ user, isAdmin }) {
   const [newTask, setNewTask] = useState(DEFAULT_NEW_TASK);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [newComment, setNewComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const isSubmittingCommentRef = useRef(false);
   const [comments, setComments] = useState([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
 
@@ -333,8 +335,12 @@ export function useTarefasData({ user, isAdmin }) {
   // -------------------------------------------------------------------------
   const handleAddComment = useCallback(
     async (event) => {
-      event.preventDefault();
+      event?.preventDefault?.();
+      if (isSubmittingCommentRef.current) return;
       if (!newComment.trim() || !selectedTask) return;
+
+      isSubmittingCommentRef.current = true;
+      setIsSubmittingComment(true);
 
       try {
         const response = await api.post(`/gestao-solar/tarefas/${selectedTask.id}/comentarios`, {
@@ -348,6 +354,9 @@ export function useTarefasData({ user, isAdmin }) {
       } catch (err) {
         const errorMsg = err.response?.data?.message || 'Erro ao adicionar comentário.';
         toast.error(errorMsg);
+      } finally {
+        isSubmittingCommentRef.current = false;
+        setIsSubmittingComment(false);
       }
     },
     [newComment, queryClient, selectedTask]
@@ -409,6 +418,7 @@ export function useTarefasData({ user, isAdmin }) {
     timeOffset,
     newTask,
     newComment,
+    isSubmittingComment,
     comments,
     isLoadingTasks,
     isLoadingComments,

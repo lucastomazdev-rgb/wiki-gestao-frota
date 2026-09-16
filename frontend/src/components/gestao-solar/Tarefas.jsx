@@ -12,7 +12,8 @@ import {
   Wrench,
   X,
   Send,
-  Lock
+  Lock,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmModal from '../ConfirmModal';
@@ -42,6 +43,7 @@ export default function Tarefas() {
     timeOffset,
     newTask,
     newComment,
+    isSubmittingComment,
     comments,
     isLoadingTasks,
     setIsNewTaskModalOpen,
@@ -515,7 +517,8 @@ export default function Tarefas() {
                         onChange={e => setNewComment(e.target.value)}
                         placeholder="Escreva uma observação ou comentário sobre a demanda..."
                         rows={2}
-                        className="w-full bg-transparent px-2 py-1 text-xs font-medium text-slate-700 outline-none placeholder:text-slate-400 resize-none min-h-[48px] custom-scrollbar"
+                        disabled={isSubmittingComment}
+                        className="w-full bg-transparent px-2 py-1 text-xs font-medium text-slate-700 outline-none placeholder:text-slate-400 resize-none min-h-[48px] custom-scrollbar disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                       <div className="flex items-center justify-between border-t border-slate-200/60 pt-2 px-1">
                         <span className="text-[10px] text-slate-400 font-medium select-none">
@@ -523,11 +526,20 @@ export default function Tarefas() {
                         </span>
                         <button 
                           type="submit"
-                          disabled={!newComment.trim()}
-                          className="px-4 py-2 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-teal-700 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          disabled={!newComment.trim() || isSubmittingComment}
+                          className="px-4 py-2 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-teal-700 disabled:opacity-40 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:cursor-not-allowed"
                         >
-                          <span>Enviar</span>
-                          <Send size={12} />
+                          {isSubmittingComment ? (
+                            <>
+                              <span>Enviando...</span>
+                              <Loader2 size={12} className="animate-spin" />
+                            </>
+                          ) : (
+                            <>
+                              <span>Enviar</span>
+                              <Send size={12} />
+                            </>
+                          )}
                         </button>
                       </div>
                     </form>
