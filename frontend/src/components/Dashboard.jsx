@@ -49,7 +49,9 @@ const PremiumAnimatedBar = (props) => {
     <g 
       onMouseEnter={() => setIsHovered(true)} 
       onMouseLeave={() => setIsHovered(false)}
-      className="cursor-pointer group"
+      className="cursor-pointer group outline-none focus:outline-none select-none"
+      style={{ outline: 'none' }}
+      tabIndex="-1"
     >
       {/* Barra */}
       <rect 
@@ -60,11 +62,12 @@ const PremiumAnimatedBar = (props) => {
         fill={fill} 
         rx={height / 2} 
         ry={height / 2}
-        className="transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        className="transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] outline-none focus:outline-none"
         style={{ 
           transform: isHovered ? 'translateX(8px)' : 'translateX(0)',
           filter: isHovered ? 'drop-shadow(0 4px 12px rgba(20, 184, 166, 0.2))' : 'none',
-          opacity: isHovered ? 1 : 0.9
+          opacity: isHovered ? 1 : 0.9,
+          outline: 'none'
         }}
       />
       
@@ -75,7 +78,7 @@ const PremiumAnimatedBar = (props) => {
         fill={isHovered ? "#0f172a" : "#64748b"} 
         textAnchor="start" 
         dominantBaseline="middle" 
-        className="text-[10px] font-black tracking-tight transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        className="text-[10px] font-black tracking-tight transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] select-none pointer-events-none"
         style={{ 
           transform: isHovered ? 'translateX(8px)' : 'translateX(0)',
           fontWeight: isHovered ? 900 : 700
@@ -105,7 +108,7 @@ const PremiumDonutSlice = React.memo((props) => {
   const dy = sin * explosionDist;
 
   return (
-    <g className="cursor-pointer outline-none">
+    <g className="cursor-pointer outline-none focus:outline-none select-none" style={{ outline: 'none' }} tabIndex="-1">
       <Sector
         cx={cx}
         cy={cy}
@@ -115,11 +118,13 @@ const PremiumDonutSlice = React.memo((props) => {
         endAngle={endAngle}
         fill={fill}
         stroke="none"
+        tabIndex="-1"
         style={{ 
           transform: `translate(${dx}px, ${dy}px)`,
           transition: 'all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)',
           filter: isHovered ? 'drop-shadow(0 8px 16px rgba(0,0,0,0.15))' : 'none',
-          willChange: 'transform'
+          willChange: 'transform',
+          outline: 'none'
         }}
       />
       
@@ -128,8 +133,8 @@ const PremiumDonutSlice = React.memo((props) => {
         y={cy + (outerRadius + 26) * sin} 
         fill={isHovered ? "#0f172a" : "#64748b"} 
         textAnchor={cos > 0 ? 'start' : 'end'} 
-        dominantBaseline="middle"
-        className="text-[9px] font-black tracking-tighter"
+        dominantBaseline="middle" 
+        className="text-[9px] font-black tracking-tighter select-none pointer-events-none"
         style={{ 
           transform: `translate(${dx}px, ${dy}px)`,
           transition: 'all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)',
@@ -148,9 +153,9 @@ const FleetDistributionChart = React.memo(({ data, total }) => {
   const [activeIndex, setActiveIndex] = useState(null);
 
   return (
-    <div className="h-[280px] sm:h-[320px] relative">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart onMouseLeave={() => setActiveIndex(null)}>
+    <div className="h-[280px] sm:h-[320px] relative select-none outline-none">
+      <ResponsiveContainer width="100%" height="100%" className="outline-none focus:outline-none select-none">
+        <PieChart onMouseLeave={() => setActiveIndex(null)} className="outline-none focus:outline-none select-none" style={{ outline: 'none' }}>
           <Pie 
             data={data} 
             cx="50%" cy="50%" 
@@ -159,6 +164,7 @@ const FleetDistributionChart = React.memo(({ data, total }) => {
             dataKey="value"
             cornerRadius={12}
             stroke="none"
+            className="outline-none focus:outline-none select-none"
             onMouseEnter={(_, index) => setActiveIndex(index)}
             onMouseLeave={() => setActiveIndex(null)}
             shape={<PremiumDonutSlice activeIndex={activeIndex} />}
@@ -167,12 +173,14 @@ const FleetDistributionChart = React.memo(({ data, total }) => {
               <Cell 
                 key={`cell-${index}`} 
                 fill={COLORS[index % COLORS.length]} 
+                className="outline-none focus:outline-none"
+                style={{ outline: 'none' }}
               />
             ))}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
          <div className="text-center">
            <span className="block text-4xl font-black text-slate-800 tracking-tighter">{total}</span>
            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest opacity-60">Total</span>

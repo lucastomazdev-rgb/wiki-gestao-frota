@@ -31,6 +31,7 @@ const Retiradas = lazy(() => import('./components/gestao-solar/Retiradas'));
 const Tutoriais = lazy(() => import('./components/gestao-solar/Tutoriais'));
 const GestaoTecnicosTerceirizados = lazy(() => import('./components/gestao-solar/tecnicos/GestaoTecnicosTerceirizados'));
 const Tarefas = lazy(() => import('./components/gestao-solar/Tarefas'));
+const DashboardSolar = lazy(() => import('./components/gestao-solar/Dashboard'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,10 +48,10 @@ function parseHash(hash, canAccessSolar) {
 
   if (parts[0] === 'solar') {
     if (!canAccessSolar) {
-      return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
+      return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'dashboard' };
     }
-    const validSolarTabs = ['veiculos', 'tarefas', 'retiradas', 'tecnicos', 'tutoriais'];
-    const solarTab = validSolarTabs.includes(parts[1]) ? parts[1] : 'veiculos';
+    const validSolarTabs = ['dashboard', 'veiculos', 'tarefas', 'retiradas', 'tecnicos', 'tutoriais'];
+    const solarTab = validSolarTabs.includes(parts[1]) ? parts[1] : 'dashboard';
     return { platformMode: 'gestao_solar', currentTab: 'home', articleSlug: null, solarTab };
   }
 
@@ -60,24 +61,24 @@ function parseHash(hash, canAccessSolar) {
         platformMode: 'wiki',
         currentTab: 'article-detail',
         articleSlug: decodeURIComponent(parts.slice(2).join('/')),
-        solarTab: 'veiculos'
+        solarTab: 'dashboard'
       };
     }
     if (parts[1] === 'downloads') {
-      return { platformMode: 'wiki', currentTab: 'downloads', articleSlug: null, solarTab: 'veiculos' };
+      return { platformMode: 'wiki', currentTab: 'downloads', articleSlug: null, solarTab: 'dashboard' };
     }
     if (parts[1] === 'admin') {
-      return { platformMode: 'wiki', currentTab: 'admin', articleSlug: null, solarTab: 'veiculos' };
+      return { platformMode: 'wiki', currentTab: 'admin', articleSlug: null, solarTab: 'dashboard' };
     }
-    return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
+    return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'dashboard' };
   }
 
-  return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'veiculos' };
+  return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'dashboard' };
 }
 
 function buildHash(platformMode, currentTab, selectedArticleSlug, currentSolarTab) {
   if (platformMode === 'gestao_solar') {
-    return `#/solar/${currentSolarTab || 'veiculos'}`;
+    return `#/solar/${currentSolarTab || 'dashboard'}`;
   }
   if (currentTab === 'article-detail' && selectedArticleSlug) {
     return `#/wiki/artigo/${encodeURIComponent(selectedArticleSlug)}`;
@@ -333,7 +334,8 @@ function AppContent() {
                 </span>
                 <ChevronRight size={14} className="hidden sm:inline shrink-0 text-slate-400" />
                 <span className="font-extrabold text-slate-900 truncate">
-                  {currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : 
+                  {currentSolarTab === 'dashboard' ? 'Dashboard & Indicadores Estratégicos' :
+                   currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : 
                    currentSolarTab === 'tarefas' ? 'Quadro de Tarefas & Demandas' :
                    currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : 
                    currentSolarTab === 'tecnicos' ? 'Técnicos & Serviços Terceirizados' : 
@@ -360,6 +362,9 @@ function AppContent() {
           </header>
 
           <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+            {currentSolarTab === 'dashboard' && (
+              <DashboardSolar />
+            )}
             {currentSolarTab === 'veiculos' && (
               <TabelaVeiculos />
             )}

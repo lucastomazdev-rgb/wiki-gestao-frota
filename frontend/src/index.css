@@ -264,3 +264,47 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ========================================================================= */
+/* PREVENÇÃO DE SELEÇÃO E BORDA/OUTLINE PRETA EM GRÁFICOS (RECHARTS / SVG)   */
+/* ========================================================================= */
+.recharts-wrapper,
+.recharts-surface,
+.recharts-responsive-container,
+.recharts-layer,
+.recharts-sector,
+.recharts-bar-rectangle,
+.recharts-area,
+.recharts-pie,
+.recharts-pie-sector,
+.recharts-default-tooltip,
+svg.recharts-surface,
+svg.recharts-surface * {
+  outline: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.recharts-wrapper:focus,
+.recharts-surface:focus,
+.recharts-responsive-container:focus,
+.recharts-layer:focus,
+.recharts-sector:focus,
+.recharts-bar-rectangle:focus,
+.recharts-area:focus,
+.recharts-pie:focus,
+.recharts-pie-sector:focus,
+svg.recharts-surface:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus-visible,
+svg.recharts-surface:focus-visible,
+svg:focus,
+svg:focus-visible,
+svg *:focus,
+svg *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
