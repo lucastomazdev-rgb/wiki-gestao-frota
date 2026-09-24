@@ -755,6 +755,15 @@ app.get('/api/documents/guia-operacional-ccr', protect, (req, res, next) => {
   });
 });
 
+app.get('/api/documents/treinamento-vanguarda', protect, (req, res, next) => {
+  const filePath = path.join(serverDirectory, 'private', 'documents', 'treinamento-vanguarda.pdf');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Disposition', 'inline; filename="Treinamento Vanguarda - Manual Operacional.pdf"');
+  res.sendFile(filePath, (error) => {
+    if (error && !res.headersSent) next(error);
+  });
+});
+
 // Get all articles (with text search & category filter)
 app.get('/api/articles', protect, async (req, res, next) => {
   try {

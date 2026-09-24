@@ -1999,6 +1999,577 @@ Com o Painel de Telemetria, a equipe de gestão e supervisão consegue:
   });
 
   console.log('✓ Tópico "Como utilizar o Painel de Telemetria" garantido no banco.');
+
+  await prisma.article.upsert({
+    where: { slug: 'treinamento-vanguarda' },
+    update: {
+      title: 'Treinamento Vanguarda',
+      categoryId: catCocaCola.id,
+      contentMarkdown: `# Treinamento Vanguarda: Operações Básicas, Gestão e Auditoria
+
+Guia operacional e prático da plataforma **Vanguarda** para a operação **Solar Coca-Cola**, abrangendo desde o monitoramento em tempo real da frota até a auditoria técnica de telemetria, tratativas de infrações e fluxos de suporte.
+
+---
+
+## 📌 1. Visão Geral e Acesso à Plataforma
+
+Para acessar o sistema de monitoramento da frota, acesse o endereço oficial:
+🔗 **Portal Vanguarda:** [https://corpvs.vanguardatech.com](https://corpvs.vanguardatech.com)
+
+Após efetuar o login com suas credenciais corporativas, você será automaticamente direcionado para a aba principal da plataforma: o módulo **Operacional**.
+
+![Tela Principal do Operacional - Mapa e Filtros de Busca](/images/tutorial_vanguarda/foto_operacional.png)
+
+### 🗺️ Estrutura da Tela Operacional
+Na barra lateral esquerda (*sidebar*), o **ícone do globo** (indicado pelo número **1** no sistema) representa o módulo Operacional. A tela é dividida estrategicamente em duas áreas de trabalho:
+
+1. **Área da Direita (Mapa em Tempo Real):** Exibe a visualização geográfica onde cada veículo rastreado está localizado no momento, identificado por ícones dinâmicos de status.
+2. **Área da Esquerda (Painel de Filtros e Busca Rápida):** Coluna lateral dedicada a pesquisas e segmentações detalhadas. Permite localizar veículos através dos seguintes campos:
+   * **Unidade:** Filtra a base ou filial operacional desejada.
+   * **Grupo de Veículo:** Segmenta grupos de caminhões, motos ou setores específicos.
+   * **Veículo:** Busca direta pela **placa** do veículo.
+   * **Motorista:** Busca pelo nome ou identificador do condutor associado.
+
+---
+
+## 📇 2. Estrutura dos Cards de Veículos
+
+Ainda na coluna da esquerda, abaixo dos filtros de busca, o sistema lista os **Cards Individuais** de cada veículo da unidade selecionada. Cada card concentra os dados instantâneos de transmissão e saúde do rastreador:
+
+![Cards de Identificação do Veículo com Status e Dados de Comunicação](/images/tutorial_vanguarda/foto_cards.png)
+
+### 🔍 Informações e Indicadores do Card:
+
+* **Status de Ignição:**
+  * 🟢 **Ícone Ativo (Aceso):** Veículo com a ignição **ligada**.
+  * ⚪ **Ícone Inativo (Apagado):** Veículo com a ignição **desligada**.
+* **Ícone de Exclamação (Alertas):**
+  * Indica ocorrências e alertas gerados pelo veículo em um determinado período. Ao clicar no ícone, é possível fazer uma checagem rápida (detalharemos a auditoria completa de alertas mais adiante).
+* **Data do GPS vs. Data do GPRS:**
+  * **Data do GPRS:** Representa a data e hora do último pacote de dados enviado pelo **chip celular (GSM)** do equipamento para os servidores da plataforma.
+  * **Data do GPS:** Representa a data e hora do último posicionamento por satélite capturado pelo receptor GPS do veículo.
+  * *Divergência entre datas:* Na grande maioria dos casos, ambas as datas estarão perfeitamente sincronizadas. Caso haja divergência temporária, isso ocorre porque o veículo pode estar em locais com oscilação na recepção do sinal celular ou satelital.
+
+> 📡 **O veículo fica sem rastreio ao passar por áreas sem sinal celular?**  
+> **Não!** Quando o veículo passa por regiões de baixa conectividade móvel chamadas de **áreas de sombra**, o rastreador armazena automaticamente todas as coordenadas, velocidades e eventos em sua **memória interna (buffer)**. Assim que o equipamento restabelece conexão com as antenas de telefonia, todo o histórico acumulado é descarregado instantaneamente nos servidores da plataforma.
+
+* **Identificação do Motorista:**
+  * Exibe o **Nome Completo** do condutor quando o crachá/cartão (RFID / I-Button) estiver previamente cadastrado e associado.
+  * Caso exiba apenas uma **numeração**, significa que o cartão utilizado não possui cadastro correspondente no sistema.
+  * > ⚠️ **Atenção Operacional:** Sempre que notar condutores identificados apenas por números, notifique imediatamente a equipe de suporte da Corpvs para realizar a associação correta do crachá.
+* **Velocidade Instantânea:** Indica a velocidade apurada no momento do último pacote transmitido.
+* **Saúde da Bateria:** Informa o nível de tensão elétrica da bateria principal do veículo.
+
+---
+
+## ⏱️ 3. Indicadores de Status de Comunicação por Cores
+
+No topo da listagem operacional, a plataforma apresenta um conjunto de blocos coloridos que classificam a frota de acordo com a pontualidade da última transmissão:
+
+![Indicadores de Status e Tempo de Comunicação da Frota](/images/tutorial_vanguarda/foto_comunicacao.png)
+
+| Cor do Card | Faixa de Comunicação | Significado Operacional | Ação Recomendada |
+| :---: | :--- | :--- | :--- |
+| 🔵 **Azul** | **Todos os Veículos** | Total de veículos cadastrados na unidade operacional. | Visão geral da frota. |
+| 🟢 **Verde** | **0 min a 10 min** | Veículos transmitindo ativamente; em rota ou recém-parados. | Operação regular normal. |
+| 🟡 **Amarelo** | **10 min a 45 min** | Veículos parados em descarga de entrega, refeição ou abastecimento. | Acompanhamento rotineiro. |
+| 🔴 **Vermelho** | **45 min a 24 horas** | Veículos ligados apenas para manobras de pátio ou sem operação ativa no dia. | Verificar escala do veículo. |
+| ⚪ **Cinza** | **Mais de 24 horas (+24h)** | Veículos desligados e sem transmissão por mais de 1 dia; inativos ou em oficina. | Auditoria ativa junto à Corpvs. |
+
+> 🛡️ **Acompanhamento Proativo Corpvs:**  
+> A equipe da Corpvs realiza contato contínuo e proativo com os gestores das filiais para averiguar os veículos que se encontram na zona **Cinza (+24h sem comunicação)**. O objetivo é identificar se o veículo está de fato parado em manutenção mecânica ou se necessita de intervenção técnica corretiva no equipamento de rastreamento.
+
+---
+
+## 🌐 4. Acesso ao Painel de Telemetria
+
+Para acompanhar a performance de direção dos motoristas, as médias das equipes e os eventos de segurança, utilize o **Painel de Telemetria**.
+
+### Passo a passo de acesso:
+1. Na barra lateral esquerda (*sidebar*), localize e clique no ícone da **Solar**.
+2. No menu suspenso que se expande, selecione a opção **Painel de Telemetria**.
+
+![Acesso ao Painel de Telemetria via Sidebar](/images/tutorial_vanguarda/picture1_paineltelemetria.png)
+
+---
+
+## 🔍 5. Filtros de Pesquisa e Regras de Consulta
+
+Ao abrir o Painel de Telemetria, preencha os parâmetros de busca para extrair o relatório desejado:
+
+![Filtros de Pesquisa do Painel de Telemetria](/images/tutorial_vanguarda/foto_filtro_telemetria.png)
+
+| Campo de Filtro | Obrigatoriedade | Regra e Comportamento no Sistema |
+| :--- | :---: | :--- |
+| **Cliente** | **Obrigatório** | Selecionar a filial / unidade operacional que deseja consultar. |
+| **Equipe** | *Opcional* | • **Se preenchido:** Filtra apenas os condutores da equipe selecionada e exibe a média daquele grupo.<br>• **Se em branco:** Carrega os dados de todas as equipes e calcula a média geral da unidade. |
+| **Data Inicial e Final** | **Obrigatório** | Define o intervalo de datas da apuração. |
+| **Tipo de Veículos** | **Obrigatório** | Caixa de seleção: escolher entre **Pesados (Caminhões)** ou **Motos**. |
+
+Após ajustar todos os filtros, clique no botão vermelho **Pesquisar**.
+
+---
+
+## 📊 6. Pilares de Condução e Eventos Monitorados
+
+Ao executar a pesquisa, o painel exibirá o card de **Avaliação Geral** contendo a nota média e o desdobramento da pontuação por pilares operacionais:
+
+![Card de Avaliação Geral com Pilares de Condução](/images/tutorial_vanguarda/picture2_paineltelemetria.png)
+
+### 🏍️ 6.1. Pilares para Frota de Motos (3 Pilares)
+
+1. 🛠️ **Manutenção:**
+   * **Evento monitorado:** *Checklist não realizado*.
+2. 🛡️ **Segurança:**
+   * **Eventos monitorados:** *Aceleração Brusca*, *Curva Brusca* (ambos classificados em severidade leve, média ou alta) e *Velocidade Máxima da Via*.
+   * > 💡 **Regra de Severidade em Motos:** Apenas os eventos classificados com severidade **média** e **alta** descontam pontos da nota do condutor. Eventos de severidade **leve** servem exclusivamente como alerta pedagógico/educativo.
+3. ⏱️ **Jornada:**
+   * **Evento monitorado:** *Movimentação em horário indevido*.
+
+---
+
+### 🚚 6.2. Pilares para Frota de Veículos Pesados / Caminhões (4 Pilares)
+
+1. 🛡️ **Segurança:** *Aceleração Brusca*, *Curva Brusca* e *Velocidade Máxima da Via*.
+2. ⚡ **Performance:** *Faixa Amarela de RPM*, *Faixa Vermelha de RPM* e *Excesso de tempo parado com ignição ligada*.
+3. 🛠️ **Manutenção:** *Checklist não realizado*.
+4. 📹 **VídeoTelemetria:** *Fadiga ao dirigir*, *Distração do condutor*, *Condutor sem cinto de segurança*, *Uso de celular em condução*, *Fumando ao conduzir* e *Veículo dianteiro muito próximo*.
+
+> ⚖️ **Regra de Composição da Média de Veículos Pesados:**  
+> No cálculo da média geral dos caminhões, **apenas 3 pilares são computados** (*Segurança*, *Manutenção* e *Performance*). O pilar de **VídeoTelemetria** é mantido temporariamente fora da nota geral para garantir total equidade com os veículos que ainda estão em fase de implantação de câmeras inteligentes.
+
+---
+
+## 📉 7. Comparativo de Pontuação e Acesso ao Condutor
+
+Todos os condutores iniciam o ciclo avaliativo com a **Nota 100** e sofrem deduções proporcionais à medida que cometem infrações de telemetria.
+
+* Ao clicar sobre qualquer pilar para investigar o motivo da perda de pontuação, o painel abre a seção **"Comparativo de pontuação"**, listando todos os motoristas em **ordem decrescente** (da maior para a menor nota).
+* Para inspecionar individualmente a jornada de um condutor, clique diretamente no **Nome do Motorista**.
+
+![Seleção do Condutor no Comparativo de Pontuação](/images/tutorial_vanguarda/picture3_paineltelemetria.png)
+
+---
+
+## 👤 8. Painel do Motorista e Detalhes da Operação
+
+Ao clicar no colaborador, o sistema abrirá a aba do **Painel do Motorista** com todos os filtros já carregados. Você terá acesso aos dados do motorista, média geral e ao card **Detalhes da Operação**, dividido em 3 sub-abas:
+
+![Painel do Motorista com Visão Geral e Indicadores](/images/tutorial_vanguarda/picture4_paineltelemetria.png)
+
+### 📋 8.1. Sub-aba: "Infrações"
+* Exibe a listagem completa de infrações apontadas para o motorista no período filtrado.
+* **Aplicação de Feedback:** Marque a caixa de seleção (*checkbox*) da infração desejada e clique em **"Adicionar Feedback"** para registrar a tratativa formal realizada pelo supervisor.
+* **Auditoria de Ocorrência:** Para auditar exatamente o local e as condições em que o evento foi registrado, clique no menu de **três pontos ("...")** na linha da infração e selecione **Visualizar**.
+
+![Acesso aos Três Pontos para Visualizar e Auditar a Infração](/images/tutorial_vanguarda/picture5_paineltelemetria.png)
+
+### 💬 8.2. Sub-aba: "Ações Educacionais"
+* Permite auditar as infrações que já receberam tratativa e feedback.
+* Permite registrar formalmente **Elogios** para os motoristas que mantiveram excelente conduta de condução ao longo do mês.
+
+### 🚚 8.3. Sub-aba: "Viagens"
+* Apresenta o histórico cronológico de todos os veículos operados pelo motorista no período, com carimbos precisos de data e horário de início e encerramento de cada jornada.
+
+---
+
+### 🎯 8.4. Notas por Pilar e Detalhamento da Avaliação
+Ao rolar a página do Painel do Motorista para baixo, é apresentada a nota discriminada por pilar com o quantitativo exato de cada tipo de infração:
+
+![Detalhamento da Nota por Pilar e Contagem de Infrações](/images/tutorial_vanguarda/picture6_paineltelemetria.png)
+
+*No exemplo ilustrado, o motorista perdeu pontuação unicamente no pilar de **Manutenção**, onde acumulou **15 ocorrências** da infração **Checklist Não Realizado**.*
+
+---
+
+## 🚨 9. Auditoria Detalhada na Tela "Alertas e Notificações"
+
+Ao clicar em **"Visualizar"** nos três pontos de uma infração (conforme visto na sub-aba *Infrações*), você é direcionado automaticamente para a tela de **Alertas e Notificações**:
+
+![Tela de Alertas e Notificações com Dados do Evento e Telemetria](/images/tutorial_vanguarda/foto_alertas.png)
+
+### 🔬 O que validar nesta tela:
+A tela já abre com os filtros preenchidos para a infração e condutor selecionados, destacando:
+* **Data e Horário:** Momento exato em que o alerta foi disparado.
+* **Placa do Veículo:** Identificação do caminhão ou moto envolvido.
+* **Velocidade:** Velocidade do veículo no instante do evento.
+* **Duração do Evento:** Tempo em que o veículo permaneceu violando a regra de telemetria.
+
+### 💡 Caso Prático de Auditoria: Faixa Amarela de RPM (> 15s)
+No caso ilustrado na tela de exemplo:
+1. O evento de **Faixa Amarela** foi configurado com a regra de tolerância: o RPM deve permanecer **acima de 2.000 RPM por mais de 15 segundos** para gerar uma infração.
+2. A duração registrada no alerta foi de **4 segundos**.
+3. **Interpretação:** Isso comprova que o condutor ultrapassou os 15 segundos da margem de tolerância e permaneceu **mais 4 segundos adicionais** em rotação excessiva (totalizando 19 segundos acima de 2.000 RPM).
+
+---
+
+## 🗺️ 10. Validação Técnica no "Relatório de Posições"
+
+Para obter certeza absoluta sobre as condições mecânicas e comprovar se o veículo realmente operava com RPM acima de 2.000 naquela data e horário (ex: **23/09/2026 às 09:26:07**), realizamos o cruzamento com o **Relatório de Posições**.
+
+### Como acessar o relatório:
+Acesse o menu superior e navegue até a opção de relatórios de telemetria:
+
+![Caminho de Acesso ao Relatório de Posições](/images/tutorial_vanguarda/foto_relatorio_posicao.png)
+
+### Passo a passo para a auditoria de posições:
+1. No cabeçalho do relatório, aplique os mesmos filtros da infração: informe a **placa do veículo** e selecione o dia e intervalo de horário correspondente.
+2. **Ativação da Coluna de RPM:** Clique no ícone de configuração de colunas (ícone de funil/pirâmide invertida) e marque a opção **"RPM"** para exibi-la na grade de dados.
+
+![Auditoria Técnica no Relatório de Posições com RPM Ativo](/images/tutorial_vanguarda/foto_auditoria_posicao.png)
+
+### 📈 Conclusão da Análise Técnica:
+O Relatório de Posições traz o histórico minuto a minuto da transmissão do rastreador (velocidade, coordenadas geográficas, condutor identificado e giro do motor).  
+Ao analisar a linha de **23/09/2026 09:26:07**, constata-se que por volta das **09:25:50** o condutor já registrava rotação superior a **2.000 RPM**, confirmando tecnicamente e sem ambiguidades a procedência do evento de Faixa Amarela.
+
+---
+
+## 🎫 11. Processos de Chamados SD (Solar Coca-Cola)
+
+### 🛠️ 11.1. Contestação de Infrações e Restituição de Nota
+* Caso uma auditoria aponte que um evento foi gerado indevidamente (por exemplo, por falha de sensor ou inconsistência eletrônica), deve ser aberto um **chamado SD para a Solar Coca-Cola**.
+* A equipe técnica da Corpvs realiza a validação profunda dos logs brutos. Comprovada a inconsistência técnica, o alerta é cancelado no sistema e a pontuação do motorista é **integralmente restituída** no ranking de condutores.
+* > 🛑 **Atenção:** Nenhuma exclusão ou estorno de pontuação pode ser realizada de forma avulsa; o processo depende obrigatoriamente de abertura formal de chamado SD.
+
+---
+
+### 👥 11.2. Solicitação de Novos Acessos (Supervisores e Condutores)
+O cadastramento de novos usuários para a operação também é condicionado à abertura de chamado SD com os seguintes dados obrigatórios:
+
+* **Para Cadastro de Supervisor:**
+  * Nome Completo;
+  * E-mail Corporativo;
+  * CPF;
+  * Cargo;
+  * Matrícula.
+
+* **Para Cadastro de Condutor / Motorista:**
+  * Nome Completo;
+  * CPF;
+  * Matrícula;
+  * Número do Cartão / Crachá (I-Button ou RFID para vinculação ao veículo);
+  * Dados da CNH (Número e Categoria);
+  * Supervisão Responsável;
+  * Categoria de Condução (Pesados ou Motos).
+
+---
+
+## 📱 12. Acesso ao Aplicativo Mobile e Suporte Corpvs
+
+### 🔑 Padrão de Credenciais do App para Condutores
+Para que os motoristas façam o primeiro login no aplicativo de acompanhamento de pontuação e checklists:
+
+* **Usuário / Login:** \`CPF@app.com.br\` *(inserir o número do CPF do motorista sem pontos ou traço seguido de @app.com.br)*
+* **Senha Inicial:** \`CPF\` *(apenas os números do CPF)*
+
+---
+
+### 🌐 Links Oficiais para Download do Aplicativo
+
+* 🤖 **Android (Google Play Store):**  
+  [Baixar Aplicativo Corpvs Gestão de Frotas na Play Store](https://play.google.com/store/apps/details?id=com.corpvs_frota&pcampaignid=web_share)
+
+* 🍏 **iOS (Apple App Store):**  
+  [Baixar Aplicativo Corpvs Gestão de Frotas na App Store](https://apps.apple.com/br/app/corpvs-gest%C3%A3o-de-frotas/id6503709447)
+
+---
+
+### 📞 Canais de Suporte e Atendimento Corpvs
+
+Para suporte técnico, resolução de dúvidas operacionais ou apoio com cadastros:
+
+* 📱 **WhatsApp e Telefone do Suporte:** \`(85) 9 9130-7306\`
+* ✉️ **E-mail Corporativo de Atendimento:** \`clientes.frota@corpvs.com.br\`
+`,
+      videoUrl: '',
+      fileDownloadUrl: '/documents/treinamento_vanguarda.pdf'
+    },
+    create: {
+      title: 'Treinamento Vanguarda',
+      slug: 'treinamento-vanguarda',
+      categoryId: catCocaCola.id,
+      contentMarkdown: `# Treinamento Vanguarda: Operações Básicas, Gestão e Auditoria
+
+Guia operacional e prático da plataforma **Vanguarda** para a operação **Solar Coca-Cola**, abrangendo desde o monitoramento em tempo real da frota até a auditoria técnica de telemetria, tratativas de infrações e fluxos de suporte.
+
+---
+
+## 📌 1. Visão Geral e Acesso à Plataforma
+
+Para acessar o sistema de monitoramento da frota, acesse o endereço oficial:
+🔗 **Portal Vanguarda:** [https://corpvs.vanguardatech.com](https://corpvs.vanguardatech.com)
+
+Após efetuar o login com suas credenciais corporativas, você será automaticamente direcionado para a aba principal da plataforma: o módulo **Operacional**.
+
+![Tela Principal do Operacional - Mapa e Filtros de Busca](/images/tutorial_vanguarda/foto_operacional.png)
+
+### 🗺️ Estrutura da Tela Operacional
+Na barra lateral esquerda (*sidebar*), o **ícone do globo** (indicado pelo número **1** no sistema) representa o módulo Operacional. A tela é dividida estrategicamente em duas áreas de trabalho:
+
+1. **Área da Direita (Mapa em Tempo Real):** Exibe a visualização geográfica onde cada veículo rastreado está localizado no momento, identificado por ícones dinâmicos de status.
+2. **Área da Esquerda (Painel de Filtros e Busca Rápida):** Coluna lateral dedicada a pesquisas e segmentações detalhadas. Permite localizar veículos através dos seguintes campos:
+   * **Unidade:** Filtra a base ou filial operacional desejada.
+   * **Grupo de Veículo:** Segmenta grupos de caminhões, motos ou setores específicos.
+   * **Veículo:** Busca direta pela **placa** do veículo.
+   * **Motorista:** Busca pelo nome ou identificador do condutor associado.
+
+---
+
+## 📇 2. Estrutura dos Cards de Veículos
+
+Ainda na coluna da esquerda, abaixo dos filtros de busca, o sistema lista os **Cards Individuais** de cada veículo da unidade selecionada. Cada card concentra os dados instantâneos de transmissão e saúde do rastreador:
+
+![Cards de Identificação do Veículo com Status e Dados de Comunicação](/images/tutorial_vanguarda/foto_cards.png)
+
+### 🔍 Informações e Indicadores do Card:
+
+* **Status de Ignição:**
+  * 🟢 **Ícone Ativo (Aceso):** Veículo com a ignição **ligada**.
+  * ⚪ **Ícone Inativo (Apagado):** Veículo com a ignição **desligada**.
+* **Ícone de Exclamação (Alertas):**
+  * Indica ocorrências e alertas gerados pelo veículo em um determinado período. Ao clicar no ícone, é possível fazer uma checagem rápida (detalharemos a auditoria completa de alertas mais adiante).
+* **Data do GPS vs. Data do GPRS:**
+  * **Data do GPRS:** Representa a data e hora do último pacote de dados enviado pelo **chip celular (GSM)** do equipamento para os servidores da plataforma.
+  * **Data do GPS:** Representa a data e hora do último posicionamento por satélite capturado pelo receptor GPS do veículo.
+  * *Divergência entre datas:* Na grande maioria dos casos, ambas as datas estarão perfeitamente sincronizadas. Caso haja divergência temporária, isso ocorre porque o veículo pode estar em locais com oscilação na recepção do sinal celular ou satelital.
+
+> 📡 **O veículo fica sem rastreio ao passar por áreas sem sinal celular?**  
+> **Não!** Quando o veículo passa por regiões de baixa conectividade móvel chamadas de **áreas de sombra**, o rastreador armazena automaticamente todas as coordenadas, velocidades e eventos em sua **memória interna (buffer)**. Assim que o equipamento restabelece conexão com as antenas de telefonia, todo o histórico acumulado é descarregado instantaneamente nos servidores da plataforma.
+
+* **Identificação do Motorista:**
+  * Exibe o **Nome Completo** do condutor quando o crachá/cartão (RFID / I-Button) estiver previamente cadastrado e associado.
+  * Caso exiba apenas uma **numeração**, significa que o cartão utilizado não possui cadastro correspondente no sistema.
+  * > ⚠️ **Atenção Operacional:** Sempre que notar condutores identificados apenas por números, notifique imediatamente a equipe de suporte da Corpvs para realizar a associação correta do crachá.
+* **Velocidade Instantânea:** Indica a velocidade apurada no momento do último pacote transmitido.
+* **Saúde da Bateria:** Informa o nível de tensão elétrica da bateria principal do veículo.
+
+---
+
+## ⏱️ 3. Indicadores de Status de Comunicação por Cores
+
+No topo da listagem operacional, a plataforma apresenta um conjunto de blocos coloridos que classificam a frota de acordo com a pontualidade da última transmissão:
+
+![Indicadores de Status e Tempo de Comunicação da Frota](/images/tutorial_vanguarda/foto_comunicacao.png)
+
+| Cor do Card | Faixa de Comunicação | Significado Operacional | Ação Recomendada |
+| :---: | :--- | :--- | :--- |
+| 🔵 **Azul** | **Todos os Veículos** | Total de veículos cadastrados na unidade operacional. | Visão geral da frota. |
+| 🟢 **Verde** | **0 min a 10 min** | Veículos transmitindo ativamente; em rota ou recém-parados. | Operação regular normal. |
+| 🟡 **Amarelo** | **10 min a 45 min** | Veículos parados em descarga de entrega, refeição ou abastecimento. | Acompanhamento rotineiro. |
+| 🔴 **Vermelho** | **45 min a 24 horas** | Veículos ligados apenas para manobras de pátio ou sem operação ativa no dia. | Verificar escala do veículo. |
+| ⚪ **Cinza** | **Mais de 24 horas (+24h)** | Veículos desligados e sem transmissão por mais de 1 dia; inativos ou em oficina. | Auditoria ativa junto à Corpvs. |
+
+> 🛡️ **Acompanhamento Proativo Corpvs:**  
+> A equipe da Corpvs realiza contato contínuo e proativo com os gestores das filiais para averiguar os veículos que se encontram na zona **Cinza (+24h sem comunicação)**. O objetivo é identificar se o veículo está de fato parado em manutenção mecânica ou se necessita de intervenção técnica corretiva no equipamento de rastreamento.
+
+---
+
+## 🌐 4. Acesso ao Painel de Telemetria
+
+Para acompanhar a performance de direção dos motoristas, as médias das equipes e os eventos de segurança, utilize o **Painel de Telemetria**.
+
+### Passo a passo de acesso:
+1. Na barra lateral esquerda (*sidebar*), localize e clique no ícone da **Solar**.
+2. No menu suspenso que se expande, selecione a opção **Painel de Telemetria**.
+
+![Acesso ao Painel de Telemetria via Sidebar](/images/tutorial_vanguarda/picture1_paineltelemetria.png)
+
+---
+
+## 🔍 5. Filtros de Pesquisa e Regras de Consulta
+
+Ao abrir o Painel de Telemetria, preencha os parâmetros de busca para extrair o relatório desejado:
+
+![Filtros de Pesquisa do Painel de Telemetria](/images/tutorial_vanguarda/foto_filtro_telemetria.png)
+
+| Campo de Filtro | Obrigatoriedade | Regra e Comportamento no Sistema |
+| :--- | :---: | :--- |
+| **Cliente** | **Obrigatório** | Selecionar a filial / unidade operacional que deseja consultar. |
+| **Equipe** | *Opcional* | • **Se preenchido:** Filtra apenas os condutores da equipe selecionada e exibe a média daquele grupo.<br>• **Se em branco:** Carrega os dados de todas as equipes e calcula a média geral da unidade. |
+| **Data Inicial e Final** | **Obrigatório** | Define o intervalo de datas da apuração. |
+| **Tipo de Veículos** | **Obrigatório** | Caixa de seleção: escolher entre **Pesados (Caminhões)** ou **Motos**. |
+
+Após ajustar todos os filtros, clique no botão vermelho **Pesquisar**.
+
+---
+
+## 📊 6. Pilares de Condução e Eventos Monitorados
+
+Ao executar a pesquisa, o painel exibirá o card de **Avaliação Geral** contendo a nota média e o desdobramento da pontuação por pilares operacionais:
+
+![Card de Avaliação Geral com Pilares de Condução](/images/tutorial_vanguarda/picture2_paineltelemetria.png)
+
+### 🏍️ 6.1. Pilares para Frota de Motos (3 Pilares)
+
+1. 🛠️ **Manutenção:**
+   * **Evento monitorado:** *Checklist não realizado*.
+2. 🛡️ **Segurança:**
+   * **Eventos monitorados:** *Aceleração Brusca*, *Curva Brusca* (ambos classificados em severidade leve, média ou alta) e *Velocidade Máxima da Via*.
+   * > 💡 **Regra de Severidade em Motos:** Apenas os eventos classificados com severidade **média** e **alta** descontam pontos da nota do condutor. Eventos de severidade **leve** servem exclusivamente como alerta pedagógico/educativo.
+3. ⏱️ **Jornada:**
+   * **Evento monitorado:** *Movimentação em horário indevido*.
+
+---
+
+### 🚚 6.2. Pilares para Frota de Veículos Pesados / Caminhões (4 Pilares)
+
+1. 🛡️ **Segurança:** *Aceleração Brusca*, *Curva Brusca* e *Velocidade Máxima da Via*.
+2. ⚡ **Performance:** *Faixa Amarela de RPM*, *Faixa Vermelha de RPM* e *Excesso de tempo parado com ignição ligada*.
+3. 🛠️ **Manutenção:** *Checklist não realizado*.
+4. 📹 **VídeoTelemetria:** *Fadiga ao dirigir*, *Distração do condutor*, *Condutor sem cinto de segurança*, *Uso de celular em condução*, *Fumando ao conduzir* e *Veículo dianteiro muito próximo*.
+
+> ⚖️ **Regra de Composição da Média de Veículos Pesados:**  
+> No cálculo da média geral dos caminhões, **apenas 3 pilares são computados** (*Segurança*, *Manutenção* e *Performance*). O pilar de **VídeoTelemetria** é mantido temporariamente fora da nota geral para garantir total equidade com os veículos que ainda estão em fase de implantação de câmeras inteligentes.
+
+---
+
+## 📉 7. Comparativo de Pontuação e Acesso ao Condutor
+
+Todos os condutores iniciam o ciclo avaliativo com a **Nota 100** e sofrem deduções proporcionais à medida que cometem infrações de telemetria.
+
+* Ao clicar sobre qualquer pilar para investigar o motivo da perda de pontuação, o painel abre a seção **"Comparativo de pontuação"**, listando todos os motoristas em **ordem decrescente** (da maior para a menor nota).
+* Para inspecionar individualmente a jornada de um condutor, clique diretamente no **Nome do Motorista**.
+
+![Seleção do Condutor no Comparativo de Pontuação](/images/tutorial_vanguarda/picture3_paineltelemetria.png)
+
+---
+
+## 👤 8. Painel do Motorista e Detalhes da Operação
+
+Ao clicar no colaborador, o sistema abrirá a aba do **Painel do Motorista** com todos os filtros já carregados. Você terá acesso aos dados do motorista, média geral e ao card **Detalhes da Operação**, dividido em 3 sub-abas:
+
+![Painel do Motorista com Visão Geral e Indicadores](/images/tutorial_vanguarda/picture4_paineltelemetria.png)
+
+### 📋 8.1. Sub-aba: "Infrações"
+* Exibe a listagem completa de infrações apontadas para o motorista no período filtrado.
+* **Aplicação de Feedback:** Marque a caixa de seleção (*checkbox*) da infração desejada e clique em **"Adicionar Feedback"** para registrar a tratativa formal realizada pelo supervisor.
+* **Auditoria de Ocorrência:** Para auditar exatamente o local e as condições em que o evento foi registrado, clique no menu de **três pontos ("...")** na linha da infração e selecione **Visualizar**.
+
+![Acesso aos Três Pontos para Visualizar e Auditar a Infração](/images/tutorial_vanguarda/picture5_paineltelemetria.png)
+
+### 💬 8.2. Sub-aba: "Ações Educacionais"
+* Permite auditar as infrações que já receberam tratativa e feedback.
+* Permite registrar formalmente **Elogios** para os motoristas que mantiveram excelente conduta de condução ao longo do mês.
+
+### 🚚 8.3. Sub-aba: "Viagens"
+* Apresenta o histórico cronológico de todos os veículos operados pelo motorista no período, com carimbos precisos de data e horário de início e encerramento de cada jornada.
+
+---
+
+### 🎯 8.4. Notas por Pilar e Detalhamento da Avaliação
+Ao rolar a página do Painel do Motorista para baixo, é apresentada a nota discriminada por pilar com o quantitativo exato de cada tipo de infração:
+
+![Detalhamento da Nota por Pilar e Contagem de Infrações](/images/tutorial_vanguarda/picture6_paineltelemetria.png)
+
+*No exemplo ilustrado, o motorista perdeu pontuação unicamente no pilar de **Manutenção**, onde acumulou **15 ocorrências** da infração **Checklist Não Realizado**.*
+
+---
+
+## 🚨 9. Auditoria Detalhada na Tela "Alertas e Notificações"
+
+Ao clicar em **"Visualizar"** nos três pontos de uma infração (conforme visto na sub-aba *Infrações*), você é direcionado automaticamente para a tela de **Alertas e Notificações**:
+
+![Tela de Alertas e Notificações com Dados do Evento e Telemetria](/images/tutorial_vanguarda/foto_alertas.png)
+
+### 🔬 O que validar nesta tela:
+A tela já abre com os filtros preenchidos para a infração e condutor selecionados, destacando:
+* **Data e Horário:** Momento exato em que o alerta foi disparado.
+* **Placa do Veículo:** Identificação do caminhão ou moto envolvido.
+* **Velocidade:** Velocidade do veículo no instante do evento.
+* **Duração do Evento:** Tempo em que o veículo permaneceu violando a regra de telemetria.
+
+### 💡 Caso Prático de Auditoria: Faixa Amarela de RPM (> 15s)
+No caso ilustrado na tela de exemplo:
+1. O evento de **Faixa Amarela** foi configurado com a regra de tolerância: o RPM deve permanecer **acima de 2.000 RPM por mais de 15 segundos** para gerar uma infração.
+2. A duração registrada no alerta foi de **4 segundos**.
+3. **Interpretação:** Isso comprova que o condutor ultrapassou os 15 segundos da margem de tolerância e permaneceu **mais 4 segundos adicionais** em rotação excessiva (totalizando 19 segundos acima de 2.000 RPM).
+
+---
+
+## 🗺️ 10. Validação Técnica no "Relatório de Posições"
+
+Para obter certeza absoluta sobre as condições mecânicas e comprovar se o veículo realmente operava com RPM acima de 2.000 naquela data e horário (ex: **23/09/2026 às 09:26:07**), realizamos o cruzamento com o **Relatório de Posições**.
+
+### Como acessar o relatório:
+Acesse o menu superior e navegue até a opção de relatórios de telemetria:
+
+![Caminho de Acesso ao Relatório de Posições](/images/tutorial_vanguarda/foto_relatorio_posicao.png)
+
+### Passo a passo para a auditoria de posições:
+1. No cabeçalho do relatório, aplique os mesmos filtros da infração: informe a **placa do veículo** e selecione o dia e intervalo de horário correspondente.
+2. **Ativação da Coluna de RPM:** Clique no ícone de configuração de colunas (ícone de funil/pirâmide invertida) e marque a opção **"RPM"** para exibi-la na grade de dados.
+
+![Auditoria Técnica no Relatório de Posições com RPM Ativo](/images/tutorial_vanguarda/foto_auditoria_posicao.png)
+
+### 📈 Conclusão da Análise Técnica:
+O Relatório de Posições traz o histórico minuto a minuto da transmissão do rastreador (velocidade, coordenadas geográficas, condutor identificado e giro do motor).  
+Ao analisar a linha de **23/09/2026 09:26:07**, constata-se que por volta das **09:25:50** o condutor já registrava rotação superior a **2.000 RPM**, confirmando tecnicamente e sem ambiguidades a procedência do evento de Faixa Amarela.
+
+---
+
+## 🎫 11. Processos de Chamados SD (Solar Coca-Cola)
+
+### 🛠️ 11.1. Contestação de Infrações e Restituição de Nota
+* Caso uma auditoria aponte que um evento foi gerado indevidamente (por exemplo, por falha de sensor ou inconsistência eletrônica), deve ser aberto um **chamado SD para a Solar Coca-Cola**.
+* A equipe técnica da Corpvs realiza a validação profunda dos logs brutos. Comprovada a inconsistência técnica, o alerta é cancelado no sistema e a pontuação do motorista é **integralmente restituída** no ranking de condutores.
+* > 🛑 **Atenção:** Nenhuma exclusão ou estorno de pontuação pode ser realizada de forma avulsa; o processo depende obrigatoriamente de abertura formal de chamado SD.
+
+---
+
+### 👥 11.2. Solicitação de Novos Acessos (Supervisores e Condutores)
+O cadastramento de novos usuários para a operação também é condicionado à abertura de chamado SD com os seguintes dados obrigatórios:
+
+* **Para Cadastro de Supervisor:**
+  * Nome Completo;
+  * E-mail Corporativo;
+  * CPF;
+  * Cargo;
+  * Matrícula.
+
+* **Para Cadastro de Condutor / Motorista:**
+  * Nome Completo;
+  * CPF;
+  * Matrícula;
+  * Número do Cartão / Crachá (I-Button ou RFID para vinculação ao veículo);
+  * Dados da CNH (Número e Categoria);
+  * Supervisão Responsável;
+  * Categoria de Condução (Pesados ou Motos).
+
+---
+
+## 📱 12. Acesso ao Aplicativo Mobile e Suporte Corpvs
+
+### 🔑 Padrão de Credenciais do App para Condutores
+Para que os motoristas façam o primeiro login no aplicativo de acompanhamento de pontuação e checklists:
+
+* **Usuário / Login:** \`CPF@app.com.br\` *(inserir o número do CPF do motorista sem pontos ou traço seguido de @app.com.br)*
+* **Senha Inicial:** \`CPF\` *(apenas os números do CPF)*
+
+---
+
+### 🌐 Links Oficiais para Download do Aplicativo
+
+* 🤖 **Android (Google Play Store):**  
+  [Baixar Aplicativo Corpvs Gestão de Frotas na Play Store](https://play.google.com/store/apps/details?id=com.corpvs_frota&pcampaignid=web_share)
+
+* 🍏 **iOS (Apple App Store):**  
+  [Baixar Aplicativo Corpvs Gestão de Frotas na App Store](https://apps.apple.com/br/app/corpvs-gest%C3%A3o-de-frotas/id6503709447)
+
+---
+
+### 📞 Canais de Suporte e Atendimento Corpvs
+
+Para suporte técnico, resolução de dúvidas operacionais ou apoio com cadastros:
+
+* 📱 **WhatsApp e Telefone do Suporte:** \`(85) 9 9130-7306\`
+* ✉️ **E-mail Corporativo de Atendimento:** \`clientes.frota@corpvs.com.br\`
+`,
+      videoUrl: '',
+      fileDownloadUrl: '/documents/treinamento_vanguarda.pdf'
+    }
+  });
+
+  console.log('✓ Tópico "Treinamento Vanguarda" garantido no banco.');
   console.log('Seeding concluído com sucesso!');
 }
 

@@ -231,6 +231,18 @@ function AppContent() {
       downloadFilename: 'GUIA OPERACIONAL DE ACESSO AO CCR.pdf',
       size: '9.8 MB',
       updatedAt: 'Oficial'
+    },
+    {
+      id: 'treinamento-vanguarda',
+      title: 'Treinamento Vanguarda - Manual Operacional',
+      category: 'Processos Coca Cola',
+      type: 'MANUAL OPERACIONAL',
+      description: 'Guia operacional de operações básicas, painel de telemetria, comparativo de condutores e auditoria de eventos na plataforma Vanguarda.',
+      apiPath: '/documents/treinamento-vanguarda',
+      downloadFilename: 'Treinamento Vanguarda - Manual Operacional.pdf',
+      fallbackUrl: '/documents/treinamento_vanguarda.pdf',
+      size: '3.9 MB',
+      updatedAt: 'Oficial'
     }
   ];
 
@@ -250,6 +262,17 @@ function AppContent() {
       }
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (error) {
+      if (file.fallbackUrl) {
+        if (download) {
+          const link = document.createElement('a');
+          link.href = file.fallbackUrl;
+          link.download = file.downloadFilename;
+          link.click();
+        } else if (popup) {
+          popup.location.replace(file.fallbackUrl);
+        }
+        return;
+      }
       popup?.close();
       toast.error(error.response?.data?.message || 'Não foi possível acessar o documento.');
     }
