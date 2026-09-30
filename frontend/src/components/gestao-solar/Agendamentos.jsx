@@ -1,2 +1,2 @@
-export * from '../Agendamentos';
-export { default } from '../Agendamentos';
+export * from './agendamentos/Agendamentos';
+export { default } from './agendamentos/Agendamentos';

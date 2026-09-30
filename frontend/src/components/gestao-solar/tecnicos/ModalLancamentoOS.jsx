@@ -246,15 +246,16 @@ export default function ModalLancamentoOS({
         equipamentos_utilizados: equipamentosSelecionados
       };
 
-      if (ordemParaEditar) {
+      if (ordemParaEditar?.id) {
         const res = await api.put(`/gestao-solar/ordens-servicos/${ordemParaEditar.id}`, payload);
         toast.success(res.data?.message || 'Ordem de Serviço atualizada com sucesso!');
+        onSuccess?.(res.data?.data?.ordem);
       } else {
         const res = await api.post('/gestao-solar/ordens-servicos', payload);
         toast.success(res.data?.message || 'Ordem de Serviço lançada com sucesso!');
+        onSuccess?.(res.data?.data?.ordem);
       }
 
-      onSuccess?.();
       onClose();
     } catch (err) {
       console.error(err);

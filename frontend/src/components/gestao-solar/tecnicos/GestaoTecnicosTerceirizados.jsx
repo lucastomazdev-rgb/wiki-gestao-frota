@@ -12,7 +12,8 @@ import {
   ShieldCheck, 
   PackagePlus,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  CalendarDays
 } from 'lucide-react';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
@@ -24,14 +25,17 @@ import ModalLancamentoOS from './ModalLancamentoOS';
 import TabelaOrdensServico from './TabelaOrdensServico';
 
 export default function GestaoTecnicosTerceirizados() {
-  // Tabs internas da tela: 'tecnicos' | 'ordens'
+  // Tabs internas da tela: 'tecnicos' | 'ordens' | 'pendentes'
   const [activeSubTab, setActiveSubTab] = useState('tecnicos');
 
   // Dados
   const [tecnicos, setTecnicos] = useState([]);
   const [ordens, setOrdens] = useState([]);
+  const [agendamentosPendentes, setAgendamentosPendentes] = useState([]);
   const [loadingTecnicos, setLoadingTecnicos] = useState(true);
   const [loadingOrdens, setLoadingOrdens] = useState(true);
+  const [loadingPendentes, setLoadingPendentes] = useState(false);
+  const [agendamentoParaOficializar, setAgendamentoParaOficializar] = useState(null);
   const [kpis, setKpis] = useState({
     totalTecnicos: 0,
     totalHomologados: 0,
@@ -109,9 +113,22 @@ export default function GestaoTecnicosTerceirizados() {
     }
   };
 
+  const fetchAgendamentosPendentes = async () => {
+    try {
+      setLoadingPendentes(true);
+      const res = await api.get('/gestao-solar/agendamentos/terceirizados-pendentes');
+      setAgendamentosPendentes(res.data?.data?.pendentes || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingPendentes(false);
+    }
+  };
+
   useEffect(() => {
     fetchTecnicos();
     fetchKpis();
+    fetchAgendamentosPendentes();
   }, []);
 
   useEffect(() => {
@@ -380,6 +397,22 @@ export default function GestaoTecnicosTerceirizados() {
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping absolute top-2 right-2" />
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('pendentes')}
+            className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 relative ${
+              activeSubTab === 'pendentes'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <CalendarDays size={16} />
+            <span>Agendamentos Pendentes ({agendamentosPendentes.length})</span>
+            {agendamentosPendentes.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-teal-500 animate-ping absolute top-2 right-2" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -473,6 +506,87 @@ export default function GestaoTecnicosTerceirizados() {
         />
       )}
 
+      {/* CONTEÚDO SUB-ABA 3: AGENDAMENTOS PENDENTES DE LANÇAMENTO */}
+      {activeSubTab === 'pendentes' && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden p-6 space-y-4">
+          <div>
+            <h3 className="text-base font-black text-slate-800 tracking-tight flex items-center gap-2">
+              <CalendarDays className="text-teal-600" size={20} />
+              <span>Agendamentos com Técnicos Terceirizados Pendentes de O.S.</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Demandas cadastradas na tela de Agendamentos com técnicos terceirizados aguardando formalização nesta aba.
+            </p>
+          </div>
+
+          {loadingPendentes ? (
+            <div className="py-12 text-center text-slate-400">
+              <RefreshCw size={24} className="mx-auto mb-2 animate-spin text-teal-600" />
+              <p className="text-xs font-semibold">Carregando agendamentos pendentes...</p>
+            </div>
+          ) : agendamentosPendentes.length === 0 ? (
+            <div className="py-12 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50">
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500" />
+              <p className="font-bold text-slate-800 text-sm">Nenhum agendamento pendente!</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Todos os agendamentos terceirizados já foram lançados como O.S. ou não há novas demandas.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+              {agendamentosPendentes.map((ag) => (
+                <div key={ag.id} className="p-4 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-slate-900 text-sm">{ag.placa}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                        {ag.servico}
+                      </span>
+                      {ag.tipo_veiculo && (
+                        <span className="text-[10px] font-semibold text-slate-500">
+                          • {ag.tipo_veiculo}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      Técnico: <strong className="text-slate-800">{ag.nome_tecnico}</strong> • Responsável: <strong>{ag.nome_responsavel}</strong> ({ag.contato_responsavel})
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Unidade: {ag.unidade || 'Solar'} ({ag.uf || 'BR'}) • Data: {ag.data_agendamento ? new Date(ag.data_agendamento).toLocaleDateString('pt-BR') : 'Aguardando Data'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tec = tecnicos.find(t => t.id === ag.tecnico_terceirizado_id) || null;
+                        setTecnicoParaOS(tec);
+                        setOrdemEmEdicao({
+                          tecnico_id: ag.tecnico_terceirizado_id,
+                          placa: ag.placa,
+                          uf: ag.uf || '',
+                          unidade: ag.unidade || '',
+                          tipo_veiculo: ag.tipo_veiculo || '',
+                          numero_os: ag.numero_os || '',
+                          status: 'Agendado'
+                        });
+                        setAgendamentoParaOficializar(ag);
+                        setModalOSOpen(true);
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    >
+                      <Wrench size={14} />
+                      <span>Lançar como O.S.</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* MODAIS DA TELA */}
 
       {/* Modal 1: Novo Técnico / Editar Técnico */}
@@ -508,10 +622,22 @@ export default function GestaoTecnicosTerceirizados() {
         tecnicos={tecnicos}
         tecnicoPreSelecionado={tecnicoParaOS}
         ordemParaEditar={ordemEmEdicao}
-        onSuccess={() => {
+        onSuccess={async (ordemCriada) => {
+          if (agendamentoParaOficializar && ordemCriada?.id) {
+            try {
+              await api.post(`/gestao-solar/agendamentos/${agendamentoParaOficializar.id}/vincular-os`, {
+                ordem_id: ordemCriada.id
+              });
+              toast.success('Agendamento vinculado à Ordem de Serviço!');
+            } catch (err) {
+              console.error(err);
+            }
+          }
           fetchOrdens();
           fetchTecnicos();
           fetchKpis();
+          fetchAgendamentosPendentes();
+          setAgendamentoParaOficializar(null);
         }}
       />
 

@@ -24,6 +24,7 @@ import { recordAuditEvent } from './services/auditLogger.js';
 import createGestaoSolarRouter from './routes/gestaoSolar.js';
 import createTecnicosTerceirizadosRouter from './routes/tecnicosTerceirizados.js';
 import createTarefasRouter from './routes/tarefas.js';
+import createAgendamentosRouter from './routes/agendamentos.js';
 
 dotenv.config();
 
@@ -931,6 +932,7 @@ app.delete('/api/articles/:id', protect, restrictTo('ADMIN'), async (req, res, n
 app.use('/api', createGestaoSolarRouter(prisma, protect));
 app.use('/api/gestao-solar', createTecnicosTerceirizadosRouter(prisma, protect));
 app.use('/api/gestao-solar', createTarefasRouter(prisma, protect));
+app.use('/api/gestao-solar', createAgendamentosRouter(prisma, protect));
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {

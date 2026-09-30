@@ -11,7 +11,8 @@ import {
   BookOpen,
   Users,
   Kanban,
-  LayoutDashboard
+  LayoutDashboard,
+  CalendarDays
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -43,6 +44,7 @@ export default function SidebarGestaoSolar({
   const navItems = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'veiculos', label: 'Veículos & Frota', icon: Truck },
+    { key: 'agendamentos', label: 'Agendamentos', icon: CalendarDays },
     { key: 'tarefas', label: 'Tarefas & Demandas', icon: Kanban },
     { key: 'retiradas', label: 'Retiradas & Baixas', icon: LogOut },
     { key: 'tecnicos', label: 'Técnicos Terceirizados', icon: Users },

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { exportRowsToCsv } from '../../utils/exportCsv';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -161,29 +162,89 @@ export function useTabelaVeiculosData({ avisarMudanca }) {
   };
 
   const handleExportarExcel = async () => {
-    if (totalRegistros === 0) {
-      toast.error('Não há dados para exportar com os filtros atuais.');
-      return;
+    try {
+      if (totalRegistros === 0) {
+        toast.error('Não há veículos para exportar com os filtros atuais.');
+        return;
+      }
+
+      toast.loading('Gerando planilha Excel...', { id: 'export-veiculos-excel' });
+
+      // Busca todos os registros correspondentes aos filtros aplicados sem truncamento de página
+      const response = await api.get('/instalacoes', {
+        params: {
+          ...filtrosApi,
+          all: 'true',
+          limit: 10000
+        }
+      });
+
+      const lista = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.data) ? response.data.data : []);
+
+      if (lista.length === 0) {
+        toast.error('Nenhum registro encontrado para exportação.', { id: 'export-veiculos-excel' });
+        return;
+      }
+
+      // Colunas solicitadas:
+      // ID, PLACA, RAZÃO SOCIAL, UF, MODELO, TIPO VEICULO, MENSALIDADE, INSTALAÇÃO, DATA INSTALAÇÃO
+      const dadosExportacao = lista.map((veiculo) => {
+        const mensalidade = veiculo.modelos_rastreadores?.valor_mensalidade != null
+          ? Number(veiculo.modelos_rastreadores.valor_mensalidade)
+          : 0;
+        const instalacao = veiculo.modelos_rastreadores?.valor_instalacao != null
+          ? Number(veiculo.modelos_rastreadores.valor_instalacao)
+          : 0;
+
+        let dataInstalacaoFormatada = '';
+        if (veiculo.data_instalacao) {
+          const d = new Date(veiculo.data_instalacao);
+          if (!isNaN(d.getTime())) {
+            dataInstalacaoFormatada = d.toLocaleDateString('pt-BR');
+          }
+        }
+
+        return {
+          'ID': veiculo.descricao_veiculo || veiculo.id || '',
+          'PLACA': veiculo.placa || '',
+          'RAZÃO SOCIAL': veiculo.unidades_clientes?.razao_social || veiculo.unidades_clientes?.nome_unidade || '',
+          'UF': veiculo.unidades_clientes?.uf || '',
+          'MODELO': veiculo.modelos_rastreadores?.nome_modelo || '',
+          'TIPO VEICULO': veiculo.modelos_rastreadores?.tipo_veiculo || '',
+          'MENSALIDADE': mensalidade,
+          'INSTALAÇÃO': instalacao,
+          'DATA INSTALAÇÃO': dataInstalacaoFormatada
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(dadosExportacao);
+
+      // Ajusta largura visual de colunas para leitura otimizada no Excel
+      ws['!cols'] = [
+        { wch: 16 }, // ID
+        { wch: 14 }, // PLACA
+        { wch: 32 }, // RAZÃO SOCIAL
+        { wch: 8 },  // UF
+        { wch: 20 }, // MODELO
+        { wch: 18 }, // TIPO VEICULO
+        { wch: 16 }, // MENSALIDADE
+        { wch: 16 }, // INSTALAÇÃO
+        { wch: 18 }  // DATA INSTALAÇÃO
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Veículos');
+
+      const dataHoje = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `relatorio_veiculos_solar_${dataHoje}.xlsx`);
+
+      toast.success(`Planilha exportada com sucesso! (${lista.length} veículos)`, { id: 'export-veiculos-excel' });
+    } catch (err) {
+      console.error('Erro ao exportar Excel de veículos:', err);
+      toast.error('Erro ao gerar planilha de veículos. Tente novamente.', { id: 'export-veiculos-excel' });
     }
-
-    const { data } = await api.get('/instalacoes', { params: filtrosApi });
-    const baseExport = Array.isArray(data) ? data : [];
-
-    const dadosFormatados = baseExport.map((veiculo) => ({
-      'ID do Veículo': veiculo.descricao_veiculo,
-      Placa: veiculo.placa,
-      Módulo: veiculo.modulo,
-      Operação: veiculo.operacao,
-      'Data de Instalação': veiculo.data_instalacao,
-      'Razão Social': veiculo.unidades_clientes?.razao_social || 'N/A',
-      UF: veiculo.unidades_clientes?.uf || 'N/A',
-      'Tipo de Veículo': veiculo.modelos_rastreadores?.tipo_veiculo || 'N/A',
-      'Modelo do Rastreador': veiculo.modelos_rastreadores?.nome_modelo || 'N/A',
-      'Mensalidade (R$)': Number(veiculo.modelos_rastreadores?.valor_mensalidade || 0).toFixed(2),
-      'Instalação (R$)': Number(veiculo.modelos_rastreadores?.valor_instalacao || 0).toFixed(2)
-    }));
-
-    exportRowsToCsv(dadosFormatados, 'Relatório_Veículos_Solar.csv');
   };
 
   const handleAbrirRetirada = (veiculo) => {
