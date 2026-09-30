@@ -293,7 +293,8 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         uploadedPaths.push(comprovanteData.path);
       }
 
-      const isHomologado = homologado === 'true' || homologado === true;
+      const isAdmin = req.user.role === 'ADMIN';
+      const isHomologado = isAdmin && (homologado === 'true' || homologado === true);
 
       // Criação transacional do técnico e sua tabela de serviços
       const novoTecnico = await prisma.$transaction(async (tx) => {
@@ -360,6 +361,28 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
     try {
       const { id } = req.params;
       const { nome, telefone, regiao, homologado, ativo, servicos: rawServicos } = req.body;
+      const isAdmin = req.user.role === 'ADMIN';
+
+      if (homologado !== undefined && !isAdmin) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Apenas administradores podem alterar o status de homologação de técnicos.'
+        });
+      }
+
+      if (rawServicos !== undefined && !isAdmin) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Apenas administradores podem alterar a tabela de preços e serviços de técnicos.'
+        });
+      }
+
+      if (ativo !== undefined && !isAdmin) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Apenas administradores podem ativar ou desativar técnicos.'
+        });
+      }
 
       const tecExistente = await prisma.tecnicos_terceirizados.findUnique({ where: { id } });
       if (!tecExistente) {

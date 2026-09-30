@@ -656,7 +656,7 @@ Casos em que o painel fica piscando, a partida fica fraca ou a moto fica “enga
 | **8** | **Casos atípicos** | Nenhum dos cenários anteriores resolveu | Falha não catalogada | Realizar análise cautelosa, revisar particularidades da instalação e acionar suporte avançado. | Cobertura total das ocorrências operacionais de "moto não está ligando". |
 `,
       videoUrl: '',
-      fileDownloadUrl: ''
+      fileDownloadUrl: '/documents/fluxograma_bloqueio_moto.pdf'
     }
   });
 

@@ -279,6 +279,7 @@ export default function ArticleDetail({ articleSlug, onBack }) {
               <motion.a
                 whileHover={{ scale: 1.005 }}
                 href={article.fileDownloadUrl}
+                download={article.title ? `${article.title}.pdf` : undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-between p-5 bg-white/5 border border-white/10 border-l-4 border-l-amber-500 rounded-2xl hover:bg-white/10 transition-all group shadow-md"

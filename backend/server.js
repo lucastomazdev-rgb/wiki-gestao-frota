@@ -764,6 +764,15 @@ app.get('/api/documents/treinamento-vanguarda', protect, (req, res, next) => {
   });
 });
 
+app.get('/api/documents/fluxograma-bloqueio-moto', protect, (req, res, next) => {
+  const filePath = path.join(serverDirectory, 'private', 'documents', 'fluxograma-bloqueio-moto.pdf');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Disposition', 'inline; filename="Fluxograma Bloqueio de Moto - Manual Operacional.pdf"');
+  res.sendFile(filePath, (error) => {
+    if (error && !res.headersSent) next(error);
+  });
+});
+
 // Get all articles (with text search & category filter)
 app.get('/api/articles', protect, async (req, res, next) => {
   try {

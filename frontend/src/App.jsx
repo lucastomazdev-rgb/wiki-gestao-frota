@@ -243,6 +243,18 @@ function AppContent() {
       fallbackUrl: '/documents/treinamento_vanguarda.pdf',
       size: '3.9 MB',
       updatedAt: 'Oficial'
+    },
+    {
+      id: 'fluxograma-bloqueio-moto',
+      title: 'Fluxograma Bloqueio de Moto - Manual Operacional',
+      category: 'Plataformas e Sistemas',
+      type: 'MANUAL OPERACIONAL',
+      description: 'Guia operacional e árvore de decisão para ocorrências de moto não ligando, checklist de vídeo, validação RFID na SCUTI e perfil de contingência.',
+      apiPath: '/documents/fluxograma-bloqueio-moto',
+      downloadFilename: 'Fluxograma Bloqueio de Moto - Manual Operacional.pdf',
+      fallbackUrl: '/documents/fluxograma_bloqueio_moto.pdf',
+      size: '1.9 MB',
+      updatedAt: 'Oficial'
     }
   ];
 

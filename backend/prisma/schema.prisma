@@ -63,6 +63,8 @@ model instalacoes {
 
   @@index([modelo_id], map: "idx_instalacoes_modelo_id")
   @@index([unidade_id], map: "idx_instalacoes_unidade_id")
+  @@index([data_instalacao], map: "idx_instalacoes_data_instalacao")
+  @@index([operacao], map: "idx_instalacoes_operacao")
 }
 
 model log_movimentacoes {
@@ -106,6 +108,8 @@ model retiradas {
 
   @@index([data_retirada], map: "idx_retiradas_data")
   @@index([placa], map: "idx_retiradas_placa")
+  @@index([unidade_id], map: "idx_retiradas_unidade_id")
+  @@index([modelo_id], map: "idx_retiradas_modelo_id")
 }
 
 model unidades_clientes {
@@ -120,6 +124,9 @@ model unidades_clientes {
   log_movimentacoes_log_movimentacoes_unidade_origem_idTounidades_clientes  log_movimentacoes[] @relation("log_movimentacoes_unidade_origem_idTounidades_clientes")
   retiradas                                                                 retiradas[]
   responsaveis                                                              unidade_responsaveis[]
+
+  @@index([nome_unidade], map: "idx_unidades_clientes_nome")
+  @@index([uf], map: "idx_unidades_clientes_uf")
 }
 
 model unidade_responsaveis {
@@ -274,6 +281,8 @@ model ordens_servicos_terceirizados {
   @@index([servico_id], map: "idx_os_servico_id")
   @@index([placa], map: "idx_os_placa")
   @@index([status], map: "idx_os_status")
+  @@index([criado_em], map: "idx_os_criado_em")
+  @@index([data_devolucao], map: "idx_os_data_devolucao")
 }
 
 model tarefas {
@@ -296,6 +305,7 @@ model tarefas {
   @@index([atribuido_a], map: "idx_tarefas_atribuido_a")
   @@index([status], map: "idx_tarefas_status")
   @@index([categoria], map: "idx_tarefas_categoria")
+  @@index([status, ordem], map: "idx_tarefas_status_ordem")
 }
 
 model tarefa_comentarios {

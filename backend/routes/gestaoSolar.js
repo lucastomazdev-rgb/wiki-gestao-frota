@@ -18,7 +18,7 @@ const uploadMemory = multer({
 
 const TUTORIAL_BUCKET = 'arquivos_tutoriais';
 const SUPABASE_STORAGE_URL = process.env.SUPABASE_URL?.replace(/\/+$/, '') || 'https://fhqhuwvfehvrhfuogyie.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZocWh1d3ZmZWh2cmhmdW9neWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMDkyMzcsImV4cCI6MjA5OTg4NTIzN30.YMykOW34L88IlnkHXYBAdaEyszZ0ebAklRRnftVjhio';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 
 export default function createGestaoSolarRouter(prisma, protect) {
   const router = express.Router();
@@ -105,9 +105,15 @@ export default function createGestaoSolarRouter(prisma, protect) {
   // Listar instalações com paginação, filtros e KPIs atômicos integrados
   router.get('/instalacoes', async (req, res, next) => {
     try {
-      const page = Math.max(1, parseInt(req.query.page) || 1);
-      const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 20));
-      const paginated = req.query.paginated === 'true' || req.query.paginated === true;
+      const isExplicitAll = req.query.all === 'true' || req.query.all === true;
+      const isExplicitPaginated = req.query.paginated === 'true' || req.query.paginated === true;
+
+      // Por padrão, ativa paginação segura para proteção contra sobrecarga de memória (OOM)
+      const paginated = !isExplicitAll || isExplicitPaginated;
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = isExplicitAll
+        ? Math.min(5000, Math.max(1, parseInt(req.query.limit, 10) || 5000))
+        : Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
       const { placa, unidade, uf, tipo, operacao, unidade_id } = req.query;
 
       const where = {};
@@ -170,6 +176,8 @@ export default function createGestaoSolarRouter(prisma, protect) {
 
       if (paginated) {
         queryOptions.skip = (page - 1) * limit;
+        queryOptions.take = limit;
+      } else {
         queryOptions.take = limit;
       }
 
@@ -1444,7 +1452,14 @@ export default function createGestaoSolarRouter(prisma, protect) {
           validate: validateTutorialFile
         });
       } catch (privateErr) {
-        // Fallback com SUPABASE_ANON_KEY no bucket
+        if (!SUPABASE_ANON_KEY) {
+          console.error('[STORAGE FAIL-SECURE] Upload falhou no storage privado e SUPABASE_ANON_KEY não está configurada no .env.');
+          const err = new Error('Armazenamento em nuvem indisponível: credenciais não configuradas no servidor.');
+          err.statusCode = 503;
+          throw err;
+        }
+
+        // Fallback com SUPABASE_ANON_KEY configurada no .env
         const ext = validateTutorialFile(file);
         const fileNameSafe = `${type}_${cleanId}_${Date.now()}.${ext}`;
         const uploadEndpoint = `${SUPABASE_STORAGE_URL}/storage/v1/object/${TUTORIAL_BUCKET}/${fileNameSafe}`;

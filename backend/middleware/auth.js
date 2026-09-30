@@ -18,7 +18,21 @@ export const readRequestToken = (req) => {
 };
 
 const CACHE_TTL_MS = 30 * 1000;
+const MAX_CACHE_SIZE = 1000;
 const sessionCache = new Map();
+
+// Limpeza periódica de sessões expiradas (desbloqueada via unref para não travar o processo)
+const cacheCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of sessionCache.entries()) {
+    if (val.expiresAt <= now) {
+      sessionCache.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+if (cacheCleanupTimer.unref) {
+  cacheCleanupTimer.unref();
+}
 
 export const invalidateSessionCache = (userId) => {
   if (userId) {
@@ -62,6 +76,11 @@ export const authenticateToken = async (prisma, token) => {
     if (!user || user.sessionVersion !== decoded.sessionVersion) {
       sessionCache.delete(decoded.sub);
       throw new Error('Sessão revogada.');
+    }
+
+    if (sessionCache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = sessionCache.keys().next().value;
+      if (oldestKey) sessionCache.delete(oldestKey);
     }
 
     sessionCache.set(decoded.sub, {

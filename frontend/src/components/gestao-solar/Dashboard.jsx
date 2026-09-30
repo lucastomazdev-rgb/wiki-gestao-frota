@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
-import * as XLSX from 'xlsx';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell, Sector
@@ -13,7 +12,7 @@ import {
 } from 'lucide-react'; 
 import toast from 'react-hot-toast';
 
-// Paleta corporativa premium Gestão Solar (Banimento estrito de roxo/violeta)
+// Paleta corporativa premium Gestão Solar (Teal, Emerald, Sky, Amber)
 const COLORS = ['#14b8a6', '#10b981', '#0284c7', '#f59e0b', '#06b6d4', '#f43f5e', '#64748b'];
 
 // Tooltip Personalizado Glassmorphism
@@ -355,7 +354,7 @@ export default function DashboardSolar() {
   } = useQuery({
     queryKey: ['gestao-solar', 'dashboard-instalacoes'],
     queryFn: async () => {
-      const response = await api.get('/instalacoes');
+      const response = await api.get('/instalacoes?all=true');
       return Array.isArray(response.data) ? response.data : (response.data?.data || []);
     },
     staleTime: 5 * 60 * 1000,
@@ -526,8 +525,8 @@ export default function DashboardSolar() {
     return { totais, topUnidades, receitaMoM, tipoVeiculoData, matrizUF };
   }, [todosVeiculos, filtroUF]);
 
-  // Exportação para Excel (.xlsx)
-  const handleExportarRelatorio = () => {
+  // Exportação para Excel (.xlsx) com carregamento dinâmico sob demanda (Dynamic Import)
+  const handleExportarRelatorio = async () => {
     const dadosFiltrados = filtroUF 
       ? todosVeiculos.filter(v => v.unidades_clientes?.uf?.trim()?.toUpperCase() === filtroUF)
       : todosVeiculos;
@@ -537,24 +536,32 @@ export default function DashboardSolar() {
       return;
     }
 
-    const dataToExport = dadosFiltrados.map(v => ({
-      'Placa': v.placa || '',
-      'Unidade': v.unidades_clientes?.nome_unidade || '',
-      'UF': v.unidades_clientes?.uf || '',
-      'Modelo': v.modelos_rastreadores?.nome_modelo || '',
-      'Tipo de Veículo': v.modelos_rastreadores?.tipo_veiculo || '',
-      'Mensalidade (R$)': Number(v.modelos_rastreadores?.valor_mensalidade) || 0,
-      'Instalação (R$)': Number(v.modelos_rastreadores?.valor_instalacao) || 0,
-      'Data de Instalação': v.data_instalacao ? new Date(v.data_instalacao).toLocaleDateString('pt-BR') : ''
-    }));
+    const toastId = toast.loading('Gerando planilha Excel...');
+    try {
+      const XLSX = await import('xlsx');
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Frota Solar');
+      const dataToExport = dadosFiltrados.map(v => ({
+        'Placa': v.placa || '',
+        'Unidade': v.unidades_clientes?.nome_unidade || '',
+        'UF': v.unidades_clientes?.uf || '',
+        'Modelo': v.modelos_rastreadores?.nome_modelo || '',
+        'Tipo de Veículo': v.modelos_rastreadores?.tipo_veiculo || '',
+        'Mensalidade (R$)': Number(v.modelos_rastreadores?.valor_mensalidade) || 0,
+        'Instalação (R$)': Number(v.modelos_rastreadores?.valor_instalacao) || 0,
+        'Data de Instalação': v.data_instalacao ? new Date(v.data_instalacao).toLocaleDateString('pt-BR') : ''
+      }));
 
-    const dataAtual = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `relatorio_solar_${filtroUF ? filtroUF.toLowerCase() : 'nacional'}_${dataAtual}.xlsx`);
-    toast.success('Relatório Excel exportado com sucesso!');
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Frota Solar');
+
+      const dataAtual = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `relatorio_solar_${filtroUF ? filtroUF.toLowerCase() : 'nacional'}_${dataAtual}.xlsx`);
+      toast.success('Relatório Excel exportado com sucesso!', { id: toastId });
+    } catch (err) {
+      console.error('Erro ao processar exportação do Excel:', err);
+      toast.error('Falha ao processar arquivo Excel.', { id: toastId });
+    }
   };
 
   if (isLoading) {
