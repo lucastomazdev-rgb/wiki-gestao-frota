@@ -253,6 +253,7 @@ export default function createAgendamentosRouter(prisma, protect) {
             ordem_terceirizado: { select: { id: true, numero_os: true, status: true, valor_total_cobrado: true } }
           },
           orderBy: [
+            { unidade: { sort: 'asc', nulls: 'last' } },
             { data_agendamento: 'desc' },
             { criado_em: 'desc' }
           ],

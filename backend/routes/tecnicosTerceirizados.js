@@ -840,11 +840,20 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         return res.status(400).json({ status: 'error', message: 'Placa inválida.' });
       }
 
-      // Busca na tabela instalacoes com joins para unidades_clientes e modelos_rastreadores
+      // Busca na tabela instalacoes com joins para unidades_clientes (e seus responsaveis) e modelos_rastreadores
       const veiculo = await prisma.instalacoes.findUnique({
         where: { placa: placaLimpa },
         include: {
-          unidades_clientes: true,
+          unidades_clientes: {
+            include: {
+              responsaveis: {
+                orderBy: [
+                  { principal: 'desc' },
+                  { criado_em: 'asc' }
+                ]
+              }
+            }
+          },
           modelos_rastreadores: true
         }
       });
@@ -858,6 +867,9 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         });
       }
 
+      // Busca o responsável explicitamente marcado como principal daquela unidade
+      const responsavelPrincipal = veiculo.unidades_clientes?.responsaveis?.find(r => r.principal === true) || null;
+
       res.status(200).json({
         status: 'success',
         found: true,
@@ -866,7 +878,9 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
           uf: veiculo.unidades_clientes?.uf || null,
           unidade: veiculo.unidades_clientes?.nome_unidade || null,
           tipo_veiculo: veiculo.modelos_rastreadores?.tipo_veiculo || veiculo.descricao_veiculo || null,
-          modelo_rastreador: veiculo.modelos_rastreadores?.nome_modelo || null
+          modelo_rastreador: veiculo.modelos_rastreadores?.nome_modelo || null,
+          nome_responsavel: responsavelPrincipal ? responsavelPrincipal.nome : null,
+          contato_responsavel: responsavelPrincipal ? responsavelPrincipal.telefone : null
         }
       });
     } catch (error) {

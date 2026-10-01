@@ -100,49 +100,70 @@ export default function ModalNovoAgendamento({
     }
   };
 
+  // Limpeza síncrona e imediata de todos os estados do formulário
+  const resetarFormulario = () => {
+    setDataAgendamento('');
+    setPlaca('');
+    setPlacaStatus(null);
+    setUnidade('');
+    setUf('');
+    setTipoVeiculo('');
+    setNomeResponsavel('');
+    setContatoResponsavel('');
+    setNumeroOs('');
+    setServico('Manutenção');
+    setTipoTecnico('CORPVS');
+    setTecnicoId('');
+    setStatus('Agendado');
+    setMotivoFrustrado('');
+    setObservacoes('');
+    setShowAddCorpvs(false);
+    setNovoCorpvsNome('');
+  };
+
+  const handleFechar = () => {
+    resetarFormulario();
+    onClose();
+  };
+
   useEffect(() => {
-    if (isOpen) {
-      carregarTecnicos().then(({ listaCorpvs, listaTerc }) => {
-        if (agendamentoParaEditar) {
-          setDataAgendamento(agendamentoParaEditar.data_agendamento ? agendamentoParaEditar.data_agendamento.slice(0, 10) : '');
-          setPlaca(agendamentoParaEditar.placa || '');
-          setUnidade(agendamentoParaEditar.unidade || '');
-          setUf(agendamentoParaEditar.uf || '');
-          setTipoVeiculo(agendamentoParaEditar.tipo_veiculo || '');
-          setNomeResponsavel(agendamentoParaEditar.nome_responsavel || '');
-          setContatoResponsavel(formatPhone(agendamentoParaEditar.contato_responsavel || ''));
-          setNumeroOs(agendamentoParaEditar.numero_os || '');
-          setServico(agendamentoParaEditar.servico || 'Manutenção');
-          setTipoTecnico(agendamentoParaEditar.tipo_tecnico || 'CORPVS');
-          setTecnicoId(agendamentoParaEditar.tipo_tecnico === 'TERCEIRIZADO' 
-            ? (agendamentoParaEditar.tecnico_terceirizado_id || '') 
-            : (agendamentoParaEditar.tecnico_corpvs_id || ''));
-          setStatus(agendamentoParaEditar.status || 'Agendado');
-          setMotivoFrustrado(agendamentoParaEditar.motivo_frustrado || '');
-          setObservacoes(agendamentoParaEditar.observacoes || '');
-          setPlacaStatus(null);
-        } else {
-          // Reset para novo cadastro
-          setDataAgendamento('');
-          setPlaca('');
-          setUnidade('');
-          setUf('');
-          setTipoVeiculo('');
-          setNomeResponsavel('');
-          setContatoResponsavel('');
-          setNumeroOs('');
-          setServico('Manutenção');
-          setTipoTecnico('CORPVS');
-          setTecnicoId(listaCorpvs.length > 0 ? listaCorpvs[0].id : '');
-          setStatus('Agendado');
-          setMotivoFrustrado('');
-          setObservacoes('');
-          setPlacaStatus(null);
-        }
-      });
-      setShowAddCorpvs(false);
-      setNovoCorpvsNome('');
+    if (!isOpen) {
+      resetarFormulario();
+      return;
     }
+
+    setShowAddCorpvs(false);
+    setNovoCorpvsNome('');
+
+    // Preenchimento ou Reset SÍNCRONO E IMEDIATO (0ms de delay)
+    if (agendamentoParaEditar) {
+      setDataAgendamento(agendamentoParaEditar.data_agendamento ? agendamentoParaEditar.data_agendamento.slice(0, 10) : '');
+      setPlaca(agendamentoParaEditar.placa || '');
+      setUnidade(agendamentoParaEditar.unidade || '');
+      setUf(agendamentoParaEditar.uf || '');
+      setTipoVeiculo(agendamentoParaEditar.tipo_veiculo || '');
+      setNomeResponsavel(agendamentoParaEditar.nome_responsavel || '');
+      setContatoResponsavel(formatPhone(agendamentoParaEditar.contato_responsavel || ''));
+      setNumeroOs(agendamentoParaEditar.numero_os || '');
+      setServico(agendamentoParaEditar.servico || 'Manutenção');
+      setTipoTecnico(agendamentoParaEditar.tipo_tecnico || 'CORPVS');
+      setTecnicoId(agendamentoParaEditar.tipo_tecnico === 'TERCEIRIZADO' 
+        ? (agendamentoParaEditar.tecnico_terceirizado_id || '') 
+        : (agendamentoParaEditar.tecnico_corpvs_id || ''));
+      setStatus(agendamentoParaEditar.status || 'Agendado');
+      setMotivoFrustrado(agendamentoParaEditar.motivo_frustrado || '');
+      setObservacoes(agendamentoParaEditar.observacoes || '');
+      setPlacaStatus(null);
+    } else {
+      resetarFormulario();
+    }
+
+    // Carregar lista de técnicos em segundo plano sem bloquear a inicialização dos campos
+    carregarTecnicos().then(({ listaCorpvs }) => {
+      if (!agendamentoParaEditar) {
+        setTecnicoId(prev => prev || (listaCorpvs && listaCorpvs.length > 0 ? listaCorpvs[0].id : ''));
+      }
+    });
   }, [isOpen, agendamentoParaEditar]);
 
   // Se trocar o tipo de técnico, ajusta o primeiro id selecionado
@@ -155,7 +176,7 @@ export default function ModalNovoAgendamento({
     }
   };
 
-  // Autocomplete da Placa
+  // Autocomplete da Placa com dados da unidade e responsável principal
   const buscarDadosPlaca = async (placaValor) => {
     const limpa = formatPlate(placaValor);
     if (!limpa || limpa.length < 5) return;
@@ -168,6 +189,20 @@ export default function ModalNovoAgendamento({
         setUnidade(d.unidade || '');
         setUf(d.uf || '');
         setTipoVeiculo(d.tipo_veiculo || '');
+
+        // Preenche o responsável principal daquela unidade se cadastrado; caso contrário, deixa em branco
+        if (d.nome_responsavel) {
+          setNomeResponsavel(d.nome_responsavel);
+        } else {
+          setNomeResponsavel('');
+        }
+
+        if (d.contato_responsavel) {
+          setContatoResponsavel(formatPhone(d.contato_responsavel));
+        } else {
+          setContatoResponsavel('');
+        }
+
         setPlacaStatus({
           found: true,
           message: `Veículo identificado: ${d.unidade || 'Solar'} (${d.uf || 'BR'})`
@@ -177,6 +212,11 @@ export default function ModalNovoAgendamento({
           found: false,
           message: 'Placa não cadastrada previamente na frota. Preencha os campos abaixo.'
         });
+        setUnidade('');
+        setUf('');
+        setTipoVeiculo('');
+        setNomeResponsavel('');
+        setContatoResponsavel('');
       }
     } catch {
       setPlacaStatus(null);
@@ -188,10 +228,19 @@ export default function ModalNovoAgendamento({
   const handlePlacaChange = (e) => {
     const val = formatPlate(e.target.value);
     setPlaca(val);
+
     if (val.length >= 7) {
       buscarDadosPlaca(val);
     } else {
       setPlacaStatus(null);
+      // Ao apagar a placa ou reduzir abaixo do tamanho mínimo, limpa os campos automáticos
+      if (val.length === 0) {
+        setUnidade('');
+        setUf('');
+        setTipoVeiculo('');
+        setNomeResponsavel('');
+        setContatoResponsavel('');
+      }
     }
   };
 
@@ -289,6 +338,7 @@ export default function ModalNovoAgendamento({
         toast.success('Agendamento registrado com sucesso!');
       }
 
+      resetarFormulario();
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
@@ -321,8 +371,9 @@ export default function ModalNovoAgendamento({
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            type="button"
+            onClick={handleFechar}
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
@@ -665,8 +716,8 @@ export default function ModalNovoAgendamento({
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+              onClick={handleFechar}
+              className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             >
               Cancelar
             </button>

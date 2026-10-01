@@ -28,6 +28,7 @@ import * as XLSX from 'xlsx';
 import SearchableSelect from '../../shared/SearchableSelect';
 import ModalNovoAgendamento from './ModalNovoAgendamento';
 import ModalConcluirAgendamento from './ModalConcluirAgendamento';
+import AgendamentosPagination from './AgendamentosPagination';
 
 const ITENS_POR_PAGINA = 15;
 
@@ -161,6 +162,21 @@ export default function Agendamentos() {
   useEffect(() => {
     carregarUnidadesDisponiveis();
   }, []);
+
+  const indexPrimeiro = totalRegistros === 0 ? 0 : (paginaAtual - 1) * ITENS_POR_PAGINA + 1;
+  const indexUltimo = Math.min(paginaAtual * ITENS_POR_PAGINA, totalRegistros);
+
+  const getPaginasExibidas = useCallback(() => {
+    const paginas = [];
+    for (let i = 1; i <= totalPaginas; i += 1) {
+      if (i === 1 || i >= totalPaginas - 2 || (i >= paginaAtual - 1 && i <= paginaAtual + 1)) {
+        paginas.push(i);
+      } else if (paginas[paginas.length - 1] !== '...') {
+        paginas.push('...');
+      }
+    }
+    return paginas;
+  }, [paginaAtual, totalPaginas]);
 
   // Excluir Agendamento
   const handleConfirmarExclusao = async () => {
@@ -478,7 +494,14 @@ export default function Agendamentos() {
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3.5 px-4">Data</th>
                 <th className="py-3.5 px-4">Placa & Veículo</th>
-                <th className="py-3.5 px-4">Unidade / UF</th>
+                <th className="py-3.5 px-4">
+                  <span className="inline-flex items-center gap-1.5 text-slate-700">
+                    Unidade / UF
+                    <span className="text-[9px] font-black text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60 lowercase tracking-normal" title="Ordenado de A a Z">
+                      a-z
+                    </span>
+                  </span>
+                </th>
                 <th className="py-3.5 px-4">Serviço</th>
                 <th className="py-3.5 px-4">Técnico</th>
                 <th className="py-3.5 px-4">Responsável & Contato</th>
@@ -665,65 +688,53 @@ export default function Agendamentos() {
           </table>
         </div>
 
-        {/* Rodapé da Tabela: Paginação */}
-        <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="text-xs text-slate-500">
-            Página <strong>{paginaAtual}</strong> de <strong>{totalPaginas}</strong>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={paginaAtual <= 1}
-              onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
-              className="p-2 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="px-3 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
-              {paginaAtual}
-            </span>
-            <button
-              type="button"
-              disabled={paginaAtual >= totalPaginas}
-              onClick={() => setPaginaAtual(prev => Math.min(totalPaginas, prev + 1))}
-              className="p-2 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
+        {/* Rodapé da Tabela: Paginação padronizada com Veículos */}
+        <AgendamentosPagination
+          totalPaginas={totalPaginas}
+          indexPrimeiro={indexPrimeiro}
+          indexUltimo={indexUltimo}
+          totalRegistros={totalRegistros}
+          paginaAtual={paginaAtual}
+          setPaginaAtual={setPaginaAtual}
+          getPaginasExibidas={getPaginasExibidas}
+        />
       </div>
 
       {/* Modal de Criação / Edição */}
-      <ModalNovoAgendamento
-        isOpen={modalNovoOpen}
-        onClose={() => {
-          setModalNovoOpen(false);
-          setAgendamentoEmEdicao(null);
-        }}
-        agendamentoParaEditar={agendamentoEmEdicao}
-        onSuccess={() => {
-          carregarAgendamentos();
-          carregarKpis();
-          carregarUnidadesDisponiveis();
-        }}
-      />
+      {modalNovoOpen && (
+        <ModalNovoAgendamento
+          key={agendamentoEmEdicao?.id || 'novo'}
+          isOpen={modalNovoOpen}
+          onClose={() => {
+            setModalNovoOpen(false);
+            setAgendamentoEmEdicao(null);
+          }}
+          agendamentoParaEditar={agendamentoEmEdicao}
+          onSuccess={() => {
+            carregarAgendamentos();
+            carregarKpis();
+            carregarUnidadesDisponiveis();
+          }}
+        />
+      )}
 
       {/* Modal de Conclusão (KM, Materiais, NF) */}
-      <ModalConcluirAgendamento
-        isOpen={modalConcluirOpen}
-        onClose={() => {
-          setModalConcluirOpen(false);
-          setAgendamentoParaConcluir(null);
-        }}
-        agendamento={agendamentoParaConcluir}
-        onSuccess={() => {
-          carregarAgendamentos();
-          carregarKpis();
-          carregarUnidadesDisponiveis();
-        }}
-      />
+      {modalConcluirOpen && (
+        <ModalConcluirAgendamento
+          key={agendamentoParaConcluir?.id || 'concluir'}
+          isOpen={modalConcluirOpen}
+          onClose={() => {
+            setModalConcluirOpen(false);
+            setAgendamentoParaConcluir(null);
+          }}
+          agendamento={agendamentoParaConcluir}
+          onSuccess={() => {
+            carregarAgendamentos();
+            carregarKpis();
+            carregarUnidadesDisponiveis();
+          }}
+        />
+      )}
 
       {/* Modal de Confirmação de Exclusão */}
       {agendamentoParaExcluir && (

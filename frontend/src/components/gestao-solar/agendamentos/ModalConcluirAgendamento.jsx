@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   CheckCircle2, 
@@ -28,6 +28,26 @@ export default function ModalConcluirAgendamento({
 
   const [numeroNf, setNumeroNf] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  // Limpeza síncrona dos estados
+  const resetarFormulario = () => {
+    setTeveKm(false);
+    setKmRodado(0);
+    setTeveEquipamento(false);
+    setEquipamentos([{ modelo: '', quantidade: 1 }]);
+    setNumeroNf('');
+  };
+
+  const handleFechar = () => {
+    resetarFormulario();
+    onClose();
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      resetarFormulario();
+    }
+  }, [isOpen, agendamento?.id]);
 
   if (!isOpen || !agendamento) return null;
 
@@ -72,6 +92,7 @@ export default function ModalConcluirAgendamento({
       setSalvando(true);
       await api.put(`/gestao-solar/agendamentos/${agendamento.id}`, payload);
       toast.success('Agendamento marcado como Realizado com sucesso!');
+      resetarFormulario();
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
@@ -102,8 +123,9 @@ export default function ModalConcluirAgendamento({
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-emerald-200 hover:text-white hover:bg-white/10 transition-colors"
+            type="button"
+            onClick={handleFechar}
+            className="p-2 rounded-xl text-emerald-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
@@ -254,8 +276,8 @@ export default function ModalConcluirAgendamento({
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+              onClick={handleFechar}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
             >
               Cancelar
             </button>
