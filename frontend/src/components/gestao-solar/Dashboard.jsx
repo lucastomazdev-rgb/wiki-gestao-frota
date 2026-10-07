@@ -548,7 +548,7 @@ export default function DashboardSolar() {
         'Tipo de Veículo': v.modelos_rastreadores?.tipo_veiculo || '',
         'Mensalidade (R$)': Number(v.modelos_rastreadores?.valor_mensalidade) || 0,
         'Instalação (R$)': Number(v.modelos_rastreadores?.valor_instalacao) || 0,
-        'Data de Instalação': v.data_instalacao ? new Date(v.data_instalacao).toLocaleDateString('pt-BR') : ''
+        'Data de Instalação': v.data_instalacao ? new Date(v.data_instalacao).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : ''
       }));
 
       const ws = XLSX.utils.json_to_sheet(dataToExport);

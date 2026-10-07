@@ -32,6 +32,19 @@ import AgendamentosPagination from './AgendamentosPagination';
 
 const ITENS_POR_PAGINA = 15;
 
+const formatarDataAgendamento = (val) => {
+  if (!val) return 'Aguardando Data';
+  if (typeof val === 'string') {
+    const dataIso = val.split('T')[0];
+    const partes = dataIso.split('-');
+    if (partes.length === 3) {
+      const [ano, mes, dia] = partes;
+      return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+    }
+  }
+  return new Date(val).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 const STATUS_CORES = {
   'Realizado': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Agendado': 'bg-cyan-50 text-cyan-700 border-cyan-200',
@@ -66,6 +79,7 @@ export default function Agendamentos() {
   });
 
   // Filtros padronizados com a tela de Veículos
+  const [inputBusca, setInputBusca] = useState('');
   const [busca, setBusca] = useState('');
   const [filtroUnidade, setFiltroUnidade] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
@@ -95,7 +109,19 @@ export default function Agendamentos() {
     filtroDataFim
   ].filter(Boolean).length;
 
+  const handleExecutarBusca = () => {
+    setPaginaAtual(1);
+    setBusca(inputBusca.trim());
+  };
+
+  const handleLimparBusca = () => {
+    setInputBusca('');
+    setBusca('');
+    setPaginaAtual(1);
+  };
+
   const handleClearFilters = () => {
+    setInputBusca('');
     setBusca('');
     setFiltroUnidade('');
     setFiltroStatus('');
@@ -156,10 +182,10 @@ export default function Agendamentos() {
 
   useEffect(() => {
     carregarAgendamentos();
-    carregarKpis();
   }, [carregarAgendamentos]);
 
   useEffect(() => {
+    carregarKpis();
     carregarUnidadesDisponiveis();
   }, []);
 
@@ -205,7 +231,7 @@ export default function Agendamentos() {
     }
 
     const dadosExportacao = agendamentos.map((item) => ({
-      'Data': item.data_agendamento ? new Date(item.data_agendamento).toLocaleDateString('pt-BR') : 'Aguardando Data',
+      'Data': item.data_agendamento ? formatarDataAgendamento(item.data_agendamento) : 'Aguardando Data',
       'Placa': item.placa,
       'Unidade': item.unidade || '',
       'UF': item.uf || '',
@@ -398,35 +424,47 @@ export default function Agendamentos() {
             icon={Users}
           />
 
-          {/* Input de Busca Textual (Placa, Responsável, O.S.) com a Mesma Estética de Veículos */}
-          <div className="relative group">
+          {/* Input de Busca Textual com Botão de Pesquisa e acionamento por Enter */}
+          <div className="relative flex items-center w-full">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={14} className="text-slate-400 group-focus-within:text-teal-500 transition-colors" />
             </div>
             <input
               type="text"
-              placeholder="Placa, responsável, O.S..."
-              className={`w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl pl-9 ${busca ? 'pr-8' : 'pr-3'} py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm`}
-              value={busca}
-              onChange={(event) => {
-                setBusca(event.target.value);
-                setPaginaAtual(1);
+              placeholder="Placa, responsável, O.S... (Enter para buscar)"
+              className="w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl pl-9 pr-24 py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
+              value={inputBusca}
+              onChange={(event) => setInputBusca(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleExecutarBusca();
+                }
               }}
             />
-            {busca && (
+            <div className="absolute right-1.5 flex items-center gap-1">
+              {inputBusca && (
+                <button
+                  type="button"
+                  onClick={handleLimparBusca}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Limpar busca"
+                  aria-label="Limpar busca"
+                >
+                  <X size={14} />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  setBusca('');
-                  setPaginaAtual(1);
-                }}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                title="Limpar busca"
-                aria-label="Limpar busca"
+                onClick={handleExecutarBusca}
+                className="px-2.5 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                title="Pesquisar (ou pressione Enter)"
+                aria-label="Pesquisar"
               >
-                <X size={14} />
+                <Search size={12} strokeWidth={2.5} />
+                <span className="text-[11px] font-bold">Buscar</span>
               </button>
-            )}
+            </div>
           </div>
         </div>
 
@@ -537,7 +575,7 @@ export default function Agendamentos() {
                       {item.data_agendamento ? (
                         <div className="flex items-center gap-1.5">
                           <Calendar size={13} className="text-slate-400" />
-                          <span>{new Date(item.data_agendamento).toLocaleDateString('pt-BR')}</span>
+                          <span>{formatarDataAgendamento(item.data_agendamento)}</span>
                         </div>
                       ) : (
                         <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">

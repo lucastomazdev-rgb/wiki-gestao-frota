@@ -24,6 +24,19 @@ import ModalCargaEquipamentos from './ModalCargaEquipamentos';
 import ModalLancamentoOS from './ModalLancamentoOS';
 import TabelaOrdensServico from './TabelaOrdensServico';
 
+const formatarDataAgendamento = (val) => {
+  if (!val) return 'Aguardando Data';
+  if (typeof val === 'string') {
+    const dataIso = val.split('T')[0];
+    const partes = dataIso.split('-');
+    if (partes.length === 3) {
+      const [ano, mes, dia] = partes;
+      return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+    }
+  }
+  return new Date(val).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 export default function GestaoTecnicosTerceirizados() {
   // Tabs internas da tela: 'tecnicos' | 'ordens' | 'pendentes'
   const [activeSubTab, setActiveSubTab] = useState('tecnicos');
@@ -552,7 +565,7 @@ export default function GestaoTecnicosTerceirizados() {
                       Técnico: <strong className="text-slate-800">{ag.nome_tecnico}</strong> • Responsável: <strong>{ag.nome_responsavel}</strong> ({ag.contato_responsavel})
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      Unidade: {ag.unidade || 'Solar'} ({ag.uf || 'BR'}) • Data: {ag.data_agendamento ? new Date(ag.data_agendamento).toLocaleDateString('pt-BR') : 'Aguardando Data'}
+                      Unidade: {ag.unidade || 'Solar'} ({ag.uf || 'BR'}) • Data: {formatarDataAgendamento(ag.data_agendamento)}
                     </div>
                   </div>
 

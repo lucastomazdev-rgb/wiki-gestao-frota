@@ -8,8 +8,18 @@ const getStatusBadgeClass = (status) => {
   return 'bg-amber-50 text-amber-600 border-amber-100';
 };
 
-const formatDateUTC = (value) =>
-  value ? new Date(value).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Aguardando Data';
+const formatDateUTC = (value) => {
+  if (!value) return 'Aguardando Data';
+  if (typeof value === 'string') {
+    const dataIso = value.split('T')[0];
+    const partes = dataIso.split('-');
+    if (partes.length === 3) {
+      const [ano, mes, dia] = partes;
+      return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+    }
+  }
+  return new Date(value).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
 
 export default function AgendamentosListView({ itensAtuais, onEdit, onDelete }) {
   return (

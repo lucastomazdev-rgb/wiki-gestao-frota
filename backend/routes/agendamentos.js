@@ -217,8 +217,9 @@ export default function createAgendamentosRouter(prisma, protect) {
 
       if (busca && busca.trim()) {
         const termo = busca.trim();
+        const termoPlaca = termo.replace(/[^a-zA-Z0-9]/g, '');
         where.OR = [
-          { placa: { contains: termo.replace(/[^a-zA-Z0-9]/g, ''), mode: 'insensitive' } },
+          ...(termoPlaca ? [{ placa: { contains: termoPlaca, mode: 'insensitive' } }] : []),
           { nome_responsavel: { contains: termo, mode: 'insensitive' } },
           { contato_responsavel: { contains: termo, mode: 'insensitive' } },
           { numero_os: { contains: termo, mode: 'insensitive' } },
@@ -243,24 +244,23 @@ export default function createAgendamentosRouter(prisma, protect) {
       const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
       const skip = (p - 1) * l;
 
-      const [total, itens] = await Promise.all([
-        prisma.agendamentos.count({ where }),
-        prisma.agendamentos.findMany({
-          where,
-          include: {
-            tecnico_corpvs: { select: { id: true, nome: true } },
-            tecnico_terceirizado: { select: { id: true, nome: true, regiao: true, homologado: true } },
-            ordem_terceirizado: { select: { id: true, numero_os: true, status: true, valor_total_cobrado: true } }
-          },
-          orderBy: [
-            { unidade: { sort: 'asc', nulls: 'last' } },
-            { data_agendamento: 'desc' },
-            { criado_em: 'desc' }
-          ],
-          skip,
-          take: l
-        })
-      ]);
+      // Execução sequencial para poupar conexões concorrentes no pool do Supabase (PgBouncer)
+      const total = await prisma.agendamentos.count({ where });
+      const itens = await prisma.agendamentos.findMany({
+        where,
+        include: {
+          tecnico_corpvs: { select: { id: true, nome: true } },
+          tecnico_terceirizado: { select: { id: true, nome: true, regiao: true, homologado: true } },
+          ordem_terceirizado: { select: { id: true, numero_os: true, status: true, valor_total_cobrado: true } }
+        },
+        orderBy: [
+          { unidade: { sort: 'asc', nulls: 'last' } },
+          { data_agendamento: 'desc' },
+          { criado_em: 'desc' }
+        ],
+        skip,
+        take: l
+      });
 
       res.status(200).json({
         status: 'success',
@@ -275,6 +275,11 @@ export default function createAgendamentosRouter(prisma, protect) {
         }
       });
     } catch (error) {
+      console.error('[ERRO_LISTAGEM_AGENDAMENTOS]', {
+        query: req.query,
+        message: error.message,
+        code: error.code
+      });
       next(error);
     }
   });
