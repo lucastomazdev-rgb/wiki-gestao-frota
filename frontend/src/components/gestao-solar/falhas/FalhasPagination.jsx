@@ -1,65 +1,71 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 export default function FalhasPagination({
-  totalPaginas,
-  indexOfFirstItem,
-  indexOfLastItem,
-  totalRegistros,
-  paginaAtual,
-  getPaginasExibidas,
-  onPrev,
-  onNext,
-  onGoTo
+  paginaAtual = 1,
+  totalPaginas = 1,
+  totalRegistros = 0,
+  itensPorPagina = 20,
+  onPageChange
 }) {
-  if (totalPaginas <= 1) return null;
+  if (totalRegistros === 0) return null;
+
+  const inicio = Math.min((paginaAtual - 1) * itensPorPagina + 1, totalRegistros);
+  const fim = Math.min(paginaAtual * itensPorPagina, totalRegistros);
 
   return (
-    <div className="p-5 border-t border-slate-200 bg-slate-50 flex flex-col lg:flex-row justify-between items-center text-sm gap-6">
-      <span className="font-medium text-slate-500 order-2 lg:order-1">
-        Exibindo <span className="font-bold text-slate-700">{indexOfFirstItem}</span> a <span className="font-bold text-slate-700">{indexOfLastItem}</span> de{' '}
-        <span className="font-bold text-slate-700">{totalRegistros}</span> rastreadores
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm text-xs">
+      {/* Indicador de registros */}
+      <span className="font-bold text-slate-600">
+        Exibindo <span className="font-extrabold text-slate-900">{inicio}</span> a{' '}
+        <span className="font-extrabold text-slate-900">{fim}</span> de{' '}
+        <span className="font-extrabold text-slate-900">{totalRegistros}</span> falhas
       </span>
 
-      <div className="flex flex-wrap items-center justify-center gap-2 order-1 lg:order-2">
+      {/* Controles de navegação */}
+      <div className="flex items-center gap-1.5">
         <button
-          onClick={onPrev}
-          disabled={paginaAtual === 1}
-          className="p-2.5 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 hover:border-slate-300 shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all text-slate-500 hover:text-slate-700 active:scale-95"
-          title="Pagina Anterior"
+          type="button"
+          onClick={() => onPageChange(1)}
+          disabled={paginaAtual <= 1}
+          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+          title="Primeira página"
         >
-          <ChevronLeft size={18} />
+          <ChevronsLeft size={16} />
         </button>
 
-        <div className="flex items-center gap-1.5 px-1 sm:px-2">
-          {getPaginasExibidas().map((page, idx) =>
-            page === '...' ? (
-              <span key={`ellipsis-${idx}`} className="px-2 text-slate-400 font-bold tracking-widest">
-                ...
-              </span>
-            ) : (
-              <button
-                key={`page-${page}`}
-                onClick={() => onGoTo(page)}
-                className={`min-w-[42px] h-[42px] flex items-center justify-center rounded-xl text-sm font-bold transition-all duration-200 border shadow-sm active:scale-90 ${
-                  paginaAtual === page
-                    ? 'bg-rose-600 border-rose-500 text-white shadow-rose-200 shadow-lg'
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-rose-300 hover:bg-rose-50/50 hover:text-rose-600'
-                }`}
-              >
-                {page}
-              </button>
-            )
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => onPageChange(paginaAtual - 1)}
+          disabled={paginaAtual <= 1}
+          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+          title="Página anterior"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        <span className="px-3 py-1 font-bold text-slate-800 bg-slate-100 rounded-lg text-xs">
+          {paginaAtual} / {totalPaginas}
+        </span>
 
         <button
-          onClick={onNext}
-          disabled={paginaAtual === totalPaginas}
-          className="p-2.5 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 hover:border-slate-300 shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all text-slate-500 hover:text-slate-700 active:scale-95"
-          title="Proxima Pagina"
+          type="button"
+          onClick={() => onPageChange(paginaAtual + 1)}
+          disabled={paginaAtual >= totalPaginas}
+          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+          title="Próxima página"
         >
-          <ChevronRight size={18} />
+          <ChevronRight size={16} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onPageChange(totalPaginas)}
+          disabled={paginaAtual >= totalPaginas}
+          className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+          title="Última página"
+        >
+          <ChevronsRight size={16} />
         </button>
       </div>
     </div>

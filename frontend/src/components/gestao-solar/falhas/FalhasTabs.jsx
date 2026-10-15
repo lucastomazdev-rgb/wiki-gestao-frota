@@ -1,34 +1,31 @@
 import React from 'react';
-import { Clock, MessageCircle, WifiOff } from 'lucide-react';
+import { MessageCircle, WifiOff } from 'lucide-react';
 
 export default function FalhasTabs({ abaAtiva, setAbaAtiva }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-1.5 flex gap-1">
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-1.5 flex gap-1.5 w-fit">
       <button
+        type="button"
         onClick={() => setAbaAtiva('lista')}
-        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
-          abaAtiva === 'lista' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+        className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+          abaAtiva === 'lista'
+            ? 'bg-slate-800 text-white shadow-sm'
+            : 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-800'
         }`}
       >
-        <WifiOff size={14} /> Lista de Falhas
+        <WifiOff size={15} /> Lista de Falhas
       </button>
+
       <button
-        onClick={() => setAbaAtiva('contatos')}
-        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
-          abaAtiva === 'contatos'
-            ? 'bg-[#25D366] text-white shadow-sm shadow-green-200'
-            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+        type="button"
+        onClick={() => setAbaAtiva('contato')}
+        className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+          abaAtiva === 'contato'
+            ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+            : 'text-slate-500 hover:bg-slate-100/70 hover:text-slate-800'
         }`}
       >
-        <MessageCircle size={14} /> Painel de Contatos
-      </button>
-      <button
-        onClick={() => setAbaAtiva('historico')}
-        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
-          abaAtiva === 'historico' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-        }`}
-      >
-        <Clock size={14} /> Historico
+        <MessageCircle size={15} /> Contato
       </button>
     </div>
   );

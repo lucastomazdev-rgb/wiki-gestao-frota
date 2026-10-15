@@ -1,2 +1,2 @@
-export * from '../Falhas';
-export { default } from '../Falhas';
+export * from './falhas/FalhasView';
+export { default } from './falhas/FalhasView';

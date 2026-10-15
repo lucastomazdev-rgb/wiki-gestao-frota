@@ -1,6 +1,16 @@
 import React from 'react';
-import { Building2, Download, Filter, ListChecks, MapPin, Search, Truck, Upload } from 'lucide-react';
-import SearchableSelect from '../shared/SearchableSelect';
+import {
+  Search,
+  MapPin,
+  Building2,
+  Truck,
+  Filter,
+  Sparkles,
+  BatteryWarning,
+  X,
+  RotateCcw
+} from 'lucide-react';
+import SearchableSelect from '../../shared/SearchableSelect';
 
 const STATUS_OPTIONS = [
   'Pendente de Contato',
@@ -13,152 +23,219 @@ const STATUS_OPTIONS = [
   'Voltou a comunicar'
 ];
 
+const CLASSIFICACAO_MAP = {
+  'NOVA FALHA': 'Novas Falhas',
+  'FALHA RECORRENTE': 'Falhas Recorrentes'
+};
+
+const CLASSIFICACAO_REVERSE_MAP = {
+  'Novas Falhas': 'NOVA FALHA',
+  'Falhas Recorrentes': 'FALHA RECORRENTE'
+};
+
 export default function FalhasFiltersBar({
-  filtroPlaca,
+  filtroPlaca = '',
   setFiltroPlaca,
-  ufsUnicas,
-  filtroUF,
+  ufsDisponiveis = [],
+  filtroUF = 'TODOS',
   setFiltroUF,
-  unidadesUnicas,
-  filtroUnidade,
+  unidadesDisponiveis = [],
+  filtroUnidade = 'TODAS',
   setFiltroUnidade,
-  tiposUnicos,
-  filtroTipo,
+  tiposDisponiveis = [],
+  filtroTipo = 'TODOS',
   setFiltroTipo,
-  filtroStatus,
+  filtroTipoFalha = 'TODOS',
+  setFiltroTipoFalha,
+  filtroStatus = 'TODOS',
   setFiltroStatus,
-  ordenacaoFalhas,
-  setOrdenacaoFalhas,
-  handleAbrirModalMassa,
-  handleExportarExcel,
-  isSupervisor,
-  fileInputRef,
-  handleFileUpload,
-  setIsImportModalOpen,
-  ultimaImportacao
+  filtroBateriaBaixa = false,
+  setFiltroBateriaBaixa,
+  ordenacao = 'unidade_asc',
+  setOrdenacao
 }) {
+  const temFiltroAtivo = Boolean(
+    filtroPlaca ||
+    (filtroUF && filtroUF !== 'TODOS') ||
+    (filtroUnidade && filtroUnidade !== 'TODAS') ||
+    (filtroTipo && filtroTipo !== 'TODOS') ||
+    (filtroTipoFalha && filtroTipoFalha !== 'TODOS') ||
+    (filtroStatus && filtroStatus !== 'TODOS') ||
+    filtroBateriaBaixa
+  );
+
+  const handleLimparTodos = () => {
+    setFiltroPlaca('');
+    setFiltroUF('TODOS');
+    setFiltroUnidade('TODAS');
+    setFiltroTipo('TODOS');
+    setFiltroTipoFalha('TODOS');
+    setFiltroStatus('TODOS');
+    if (setFiltroBateriaBaixa) setFiltroBateriaBaixa(false);
+  };
+
   return (
-    <div className="p-4 pb-5 border-b border-slate-100 bg-slate-50/20 relative z-[10] rounded-t-3xl">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 xl:grid-cols-9 gap-3 items-center">
-        <div className="lg:col-span-1">
-          <div className="relative group flex-1">
+    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 space-y-4">
+      
+      {/* Banner de Bateria Crítica (< 11V) quando ativo */}
+      {filtroBateriaBaixa && (
+        <div className="flex items-center justify-between bg-amber-50 border border-amber-200/90 px-4 py-2.5 rounded-2xl text-xs text-amber-900 font-bold animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <BatteryWarning size={18} className="text-amber-600 shrink-0" />
+            <span>
+              Filtro ativo: Exibindo apenas veículos com <strong>Bateria Crítica (&lt; 11V)</strong>
+            </span>
+          </div>
+          {setFiltroBateriaBaixa && (
+            <button
+              type="button"
+              onClick={() => setFiltroBateriaBaixa(false)}
+              className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-800 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-xl transition-colors cursor-pointer shrink-0"
+            >
+              <X size={12} />
+              Remover Filtro
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Grid Colunar de Filtros */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 items-end">
+        
+        {/* 1. Busca por Placa */}
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            Placa
+          </label>
+          <div className="relative group">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none z-10">
-              <Search size={18} className={`transition-colors ${filtroPlaca ? 'text-teal-500' : 'text-slate-400'}`} />
+              <Search size={18} className="text-slate-400 group-focus-within:text-teal-500 transition-colors" />
             </div>
             <input
               type="text"
-              placeholder="Placa..."
+              placeholder="Ex: ABC1D23"
               value={filtroPlaca}
-              onChange={(event) => setFiltroPlaca(event.target.value.toUpperCase())}
-              className={`w-full bg-white border text-sm rounded-xl pl-10 pr-4 py-3 outline-none transition-all shadow-sm ${
-                filtroPlaca
-                  ? 'border-teal-500 ring-4 ring-teal-500/10 font-bold text-slate-800'
-                  : 'border-slate-200 group-hover:border-teal-300 text-slate-400 font-medium'
-              }`}
+              onChange={(e) => setFiltroPlaca(e.target.value.toUpperCase())}
+              className="w-full bg-white border border-slate-200 group-hover:border-teal-300 text-sm font-mono font-bold rounded-xl pl-10 pr-3.5 h-12 outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 transition-all shadow-sm text-slate-800 placeholder-slate-400 uppercase"
             />
           </div>
         </div>
 
-        <div className="lg:col-span-1">
-          <SearchableSelect label="UF" placeholder="Estado..." options={ufsUnicas} value={filtroUF} onChange={setFiltroUF} icon={MapPin} />
+        {/* 2. Classificação (Novas vs Recorrentes) */}
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            Classificação
+          </label>
+          <SearchableSelect
+            placeholder="Todas as Falhas"
+            options={['Novas Falhas', 'Falhas Recorrentes']}
+            value={CLASSIFICACAO_MAP[filtroTipoFalha] || ''}
+            onChange={(val) => setFiltroTipoFalha(CLASSIFICACAO_REVERSE_MAP[val] || 'TODOS')}
+            icon={Sparkles}
+          />
         </div>
 
-        <div className="lg:col-span-1 xl:col-span-2">
+        {/* 3. Estado (UF) */}
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            UF
+          </label>
           <SearchableSelect
-            label="Unidade"
-            placeholder="Selecionar..."
-            options={unidadesUnicas}
-            value={filtroUnidade}
-            onChange={setFiltroUnidade}
+            placeholder="Todos os Estados"
+            options={ufsDisponiveis}
+            value={filtroUF === 'TODOS' ? '' : filtroUF}
+            onChange={(val) => setFiltroUF(val || 'TODOS')}
+            icon={MapPin}
+          />
+        </div>
+
+        {/* 4. Unidade */}
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            Unidade
+          </label>
+          <SearchableSelect
+            placeholder="Todas as Unidades"
+            options={unidadesDisponiveis}
+            value={filtroUnidade === 'TODAS' ? '' : filtroUnidade}
+            onChange={(val) => setFiltroUnidade(val || 'TODAS')}
             icon={Building2}
           />
         </div>
 
-        <div className="lg:col-span-1">
-          <SearchableSelect label="Tipo" placeholder="Veículo..." options={tiposUnicos} value={filtroTipo} onChange={setFiltroTipo} icon={Truck} />
+        {/* 5. Tipo de Veículo */}
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            Tipo Veículo
+          </label>
+          <SearchableSelect
+            placeholder="Todos os Tipos"
+            options={tiposDisponiveis}
+            value={filtroTipo === 'TODOS' ? '' : filtroTipo}
+            onChange={(val) => setFiltroTipo(val || 'TODOS')}
+            icon={Truck}
+          />
         </div>
 
-        <div className="lg:col-span-1 xl:col-span-2">
+        {/* 6. Status Tratativa */}
+        <div>
+          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+            Status Tratativa
+          </label>
           <SearchableSelect
-            label="Status da Falha"
-            placeholder="Qualquer..."
+            placeholder="Todos os Status"
             options={STATUS_OPTIONS}
-            value={filtroStatus}
-            onChange={setFiltroStatus}
+            value={filtroStatus === 'TODOS' ? '' : filtroStatus}
+            onChange={(val) => setFiltroStatus(val || 'TODOS')}
             icon={Filter}
           />
         </div>
 
-        <div className="flex flex-col gap-1 lg:col-span-2 items-end justify-center">
-          <div className="w-full flex justify-between lg:justify-end mb-2">
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setOrdenacaoFalhas('unidade_asc')}
-                className={`h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                  ordenacaoFalhas === 'unidade_asc'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                }`}
-                title="Ordenar por Unidade A-Z"
-              >
-                Unidade A-Z
-              </button>
-              <button
-                type="button"
-                onClick={() => setOrdenacaoFalhas('ultima_desc')}
-                className={`h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                  ordenacaoFalhas === 'ultima_desc'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                }`}
-                title="Ordenar por última transmissão mais recente"
-              >
-                Mais recente
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-2 w-full justify-between lg:justify-end">
-            <button
-              onClick={handleAbrirModalMassa}
-              className="w-28 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all duration-300 shadow-md shadow-emerald-200/50 hover:scale-105 hover:-translate-y-0.5 active:scale-95 group cursor-pointer"
-            >
-              <ListChecks size={16} className="group-hover:rotate-12 transition-transform" /> Massa
-            </button>
-
-            <div className="flex gap-1">
-              <button
-                onClick={handleExportarExcel}
-                title="Exportar Excel"
-                className="w-11 h-11 flex items-center justify-center bg-white border border-slate-200 hover:border-rose-300 text-rose-500 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:scale-105 hover:-translate-y-0.5 active:scale-95 group cursor-pointer"
-              >
-                <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-              </button>
-
-              {isSupervisor && (
-                <>
-                  <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
-                  <button
-                    onClick={() => setIsImportModalOpen(true)}
-                    title="Sincronizar"
-                    className="w-11 h-11 flex items-center justify-center bg-slate-800 hover:bg-slate-900 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 hover:-translate-y-0.5 active:scale-95 group cursor-pointer"
-                  >
-                    <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
-      {ultimaImportacao && (
-        <div className="absolute bottom-1.5 right-5 text-[9px] text-slate-400 font-medium whitespace-nowrap opacity-80">
-          Importação: {new Date(ultimaImportacao).toLocaleDateString('pt-BR')} às{' '}
-          {new Date(ultimaImportacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+      {/* Linha Inferior: Ordenação e Limpeza de Filtros */}
+      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        
+        {/* Seletor de Ordenação */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Ordenar:
+          </span>
+          <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
+            {[
+              { key: 'unidade_asc', label: 'Unidade (A-Z)' },
+              { key: 'placa_asc', label: 'Placa (A-Z)' },
+              { key: 'ultima_desc', label: 'Última Transmissão' }
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setOrdenacao(opt.key)}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  ordenacao === opt.key
+                    ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+
+        {/* Botão de Limpar Todos os Filtros */}
+        {temFiltroAtivo && (
+          <button
+            type="button"
+            onClick={handleLimparTodos}
+            className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+          >
+            <RotateCcw size={12} /> Limpar Filtros
+          </button>
+        )}
+
+      </div>
+
     </div>
   );
 }

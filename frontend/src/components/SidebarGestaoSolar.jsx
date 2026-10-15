@@ -12,7 +12,8 @@ import {
   Users,
   Kanban,
   LayoutDashboard,
-  CalendarDays
+  CalendarDays,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -44,6 +45,7 @@ export default function SidebarGestaoSolar({
   const navItems = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'veiculos', label: 'Veículos & Frota', icon: Truck },
+    { key: 'falhas', label: 'Falhas de Comunicação', icon: AlertTriangle },
     { key: 'agendamentos', label: 'Agendamentos', icon: CalendarDays },
     { key: 'tarefas', label: 'Tarefas & Demandas', icon: Kanban },
     { key: 'retiradas', label: 'Retiradas & Baixas', icon: LogOut },

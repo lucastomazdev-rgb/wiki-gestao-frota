@@ -25,6 +25,7 @@ import createGestaoSolarRouter from './routes/gestaoSolar.js';
 import createTecnicosTerceirizadosRouter from './routes/tecnicosTerceirizados.js';
 import createTarefasRouter from './routes/tarefas.js';
 import createAgendamentosRouter from './routes/agendamentos.js';
+import createFalhasRouter from './routes/falhas.js';
 
 dotenv.config();
 
@@ -150,6 +151,8 @@ const heavyMutationLimiter = rateLimit({
 app.use('/api/instalacoes/sync', heavyMutationLimiter);
 app.use('/api/retiradas/sync', heavyMutationLimiter);
 app.use('/api/gestao-solar/tecnicos/:id/equipamentos/carga', heavyMutationLimiter);
+app.use('/api/gestao-solar/falhas/importar', heavyMutationLimiter);
+app.use('/api/gestao-solar/falhas/registros-massa', heavyMutationLimiter);
 
 // Middleware de CORS com validação estrita de origens
 const configuredClientUrls = process.env.CLIENT_URL
@@ -200,8 +203,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Setup-Token']
 }));
 
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use('/api', (req, res, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
@@ -933,6 +936,7 @@ app.use('/api', createGestaoSolarRouter(prisma, protect));
 app.use('/api/gestao-solar', createTecnicosTerceirizadosRouter(prisma, protect));
 app.use('/api/gestao-solar', createTarefasRouter(prisma, protect));
 app.use('/api/gestao-solar', createAgendamentosRouter(prisma, protect));
+app.use('/api/gestao-solar', createFalhasRouter(prisma, protect));
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
