@@ -510,9 +510,32 @@ export default function createAgendamentosRouter(prisma, protect) {
       const { id } = req.params;
       const { ordem_id } = z.object({ ordem_id: z.string().uuid() }).parse(req.body);
 
+      const ordem = await prisma.ordens_servicos_terceirizados.findUnique({
+        where: { id: ordem_id }
+      });
+
+      if (!ordem) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Ordem de Serviço informada não foi encontrada.'
+        });
+      }
+
+      const updatePayload = {
+        ordem_servico_terceirizado_id: ordem_id
+      };
+
+      if (ordem.numero_os) {
+        updatePayload.numero_os = ordem.numero_os;
+      }
+
+      if (ordem.status === 'Realizado') {
+        updatePayload.status = 'Realizado';
+      }
+
       const agendamento = await prisma.agendamentos.update({
         where: { id },
-        data: { ordem_servico_terceirizado_id: ordem_id }
+        data: updatePayload
       });
 
       res.status(200).json({

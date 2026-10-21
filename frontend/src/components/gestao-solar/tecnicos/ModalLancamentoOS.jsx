@@ -243,17 +243,24 @@ export default function ModalLancamentoOS({
         km_quantidade: teveKm ? kmQuantidade : 0,
         numero_nf: numeroNf.trim() || null,
         status,
-        equipamentos_utilizados: equipamentosSelecionados
+        equipamentos_utilizados: equipamentosSelecionados,
+        agendamento_id: ordemParaEditar?.agendamento_id || null
       };
 
       if (ordemParaEditar?.id) {
         const res = await api.put(`/gestao-solar/ordens-servicos/${ordemParaEditar.id}`, payload);
         toast.success(res.data?.message || 'Ordem de Serviço atualizada com sucesso!');
-        onSuccess?.(res.data?.data?.ordem);
+        const ordemSalva = res.data?.data?.ordem_servico || res.data?.data?.ordem;
+        if (onSuccess) {
+          await onSuccess(ordemSalva);
+        }
       } else {
         const res = await api.post('/gestao-solar/ordens-servicos', payload);
         toast.success(res.data?.message || 'Ordem de Serviço lançada com sucesso!');
-        onSuccess?.(res.data?.data?.ordem);
+        const ordemSalva = res.data?.data?.ordem_servico || res.data?.data?.ordem;
+        if (onSuccess) {
+          await onSuccess(ordemSalva);
+        }
       }
 
       onClose();

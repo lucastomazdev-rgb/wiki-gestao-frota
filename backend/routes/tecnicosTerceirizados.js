@@ -48,7 +48,8 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
     equipamentos_utilizados: z.array(z.object({
       modelo: z.string().trim().min(1).max(150).transform(value => value.toUpperCase()),
       quantidade: z.coerce.number().int().min(1).max(10000)
-    }).strict()).max(50).default([])
+    }).strict()).max(50).default([]),
+    agendamento_id: z.string().uuid().nullable().optional()
   }).strict();
 
   const consolidateEquipment = (items) => [...items.reduce((map, item) => {
@@ -1030,7 +1031,7 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
           );
         }
 
-        return tx.ordens_servicos_terceirizados.create({
+        const novaOS = await tx.ordens_servicos_terceirizados.create({
           data: {
             numero_os: input.numero_os,
             tecnico_id: input.tecnico_id,
@@ -1058,12 +1059,27 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
             }
           }
         });
+
+        if (input.agendamento_id) {
+          await tx.agendamentos.update({
+            where: { id: input.agendamento_id },
+            data: {
+              ordem_servico_terceirizado_id: novaOS.id,
+              numero_os: input.numero_os || undefined,
+              status: input.status === 'Realizado' ? 'Realizado' : undefined
+            }
+          }).catch((err) => {
+            console.error('Erro ao vincular agendamento na transação de O.S.:', err);
+          });
+        }
+
+        return novaOS;
       }, { maxWait: 10000, timeout: 30000 });
 
       res.status(201).json({
         status: 'success',
         message: 'Ordem de Serviço cadastrada com sucesso!',
-        data: { ordem_servico: novaOS }
+        data: { ordem_servico: novaOS, ordem: novaOS }
       });
     } catch (error) {
       next(error);
@@ -1296,7 +1312,7 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
       res.status(200).json({
         status: 'success',
         message: 'Ordem de Serviço atualizada com sucesso!',
-        data: { ordem_servico: osAtualizada }
+        data: { ordem_servico: osAtualizada, ordem: osAtualizada }
       });
     } catch (error) {
       next(error);

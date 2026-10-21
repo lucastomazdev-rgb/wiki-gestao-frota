@@ -17,7 +17,6 @@ import {
   Building2,
   Users,
   Wrench,
-  CheckCircle,
   X,
   Layers,
   CalendarRange
@@ -27,7 +26,6 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import SearchableSelect from '../../shared/SearchableSelect';
 import ModalNovoAgendamento from './ModalNovoAgendamento';
-import ModalConcluirAgendamento from './ModalConcluirAgendamento';
 import AgendamentosPagination from './AgendamentosPagination';
 
 const ITENS_POR_PAGINA = 15;
@@ -91,9 +89,6 @@ export default function Agendamentos() {
   // Modais
   const [modalNovoOpen, setModalNovoOpen] = useState(false);
   const [agendamentoEmEdicao, setAgendamentoEmEdicao] = useState(null);
-
-  const [modalConcluirOpen, setModalConcluirOpen] = useState(false);
-  const [agendamentoParaConcluir, setAgendamentoParaConcluir] = useState(null);
 
   const [agendamentoParaExcluir, setAgendamentoParaExcluir] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -679,22 +674,6 @@ export default function Agendamentos() {
                     {/* Ações */}
                     <td className="py-3.5 px-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        
-                        {/* Botão Marcar como Realizado */}
-                        {item.status !== 'Realizado' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAgendamentoParaConcluir(item);
-                              setModalConcluirOpen(true);
-                            }}
-                            className="p-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
-                            title="Marcar como Realizado"
-                          >
-                            <CheckCircle size={15} />
-                          </button>
-                        )}
-
                         {/* Botão Editar */}
                         <button
                           type="button"
@@ -756,23 +735,7 @@ export default function Agendamentos() {
         />
       )}
 
-      {/* Modal de Conclusão (KM, Materiais, NF) */}
-      {modalConcluirOpen && (
-        <ModalConcluirAgendamento
-          key={agendamentoParaConcluir?.id || 'concluir'}
-          isOpen={modalConcluirOpen}
-          onClose={() => {
-            setModalConcluirOpen(false);
-            setAgendamentoParaConcluir(null);
-          }}
-          agendamento={agendamentoParaConcluir}
-          onSuccess={() => {
-            carregarAgendamentos();
-            carregarKpis();
-            carregarUnidadesDisponiveis();
-          }}
-        />
-      )}
+
 
       {/* Modal de Confirmação de Exclusão */}
       {agendamentoParaExcluir && (

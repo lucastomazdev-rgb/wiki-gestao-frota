@@ -576,13 +576,14 @@ export default function GestaoTecnicosTerceirizados() {
                         const tec = tecnicos.find(t => t.id === ag.tecnico_terceirizado_id) || null;
                         setTecnicoParaOS(tec);
                         setOrdemEmEdicao({
+                          agendamento_id: ag.id,
                           tecnico_id: ag.tecnico_terceirizado_id,
                           placa: ag.placa,
                           uf: ag.uf || '',
                           unidade: ag.unidade || '',
                           tipo_veiculo: ag.tipo_veiculo || '',
                           numero_os: ag.numero_os || '',
-                          status: 'Agendado'
+                          status: ag.status || 'Agendado'
                         });
                         setAgendamentoParaOficializar(ag);
                         setModalOSOpen(true);
@@ -636,14 +637,15 @@ export default function GestaoTecnicosTerceirizados() {
         tecnicoPreSelecionado={tecnicoParaOS}
         ordemParaEditar={ordemEmEdicao}
         onSuccess={async (ordemCriada) => {
-          if (agendamentoParaOficializar && ordemCriada?.id) {
+          const osId = ordemCriada?.id || ordemCriada?.ordem_servico?.id;
+          if (agendamentoParaOficializar && osId) {
             try {
               await api.post(`/gestao-solar/agendamentos/${agendamentoParaOficializar.id}/vincular-os`, {
-                ordem_id: ordemCriada.id
+                ordem_id: osId
               });
               toast.success('Agendamento vinculado à Ordem de Serviço!');
             } catch (err) {
-              console.error(err);
+              console.error('Erro ao vincular agendamento:', err);
             }
           }
           fetchOrdens();
