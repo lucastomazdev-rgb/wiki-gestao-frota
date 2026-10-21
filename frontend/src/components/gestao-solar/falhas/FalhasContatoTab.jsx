@@ -4,11 +4,13 @@ import toast from 'react-hot-toast';
 import {
   MessageCircle, Building2, Truck, Bike, Video, AlertTriangle,
   CheckCircle2, Clock, Search, MapPin, User, Users, ExternalLink,
-  Star, Phone, Layers
+  Star, Phone, Layers, Copy, Check
 } from 'lucide-react';
 import { useUnidadesLookup } from '../../../hooks/useLookups';
 import SearchableSelect from '../../shared/SearchableSelect';
 import ModalContatoWhatsApp from './ModalContatoWhatsApp';
+import ModalContatoMultiUnidade from './ModalContatoMultiUnidade';
+import { agruparResponsaveisMultiUnidade } from '../../../utils/contatoMultiUtils';
 
 export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
   const [falhasLote, setFalhasLote] = useState([]);
@@ -20,6 +22,29 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
   // Modal WhatsApp
   const [modalData, setModalData] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Modal Contato Multi-Unidade
+  const [isModalMultiOpen, setIsModalMultiOpen] = useState(false);
+  const [responsavelMultiInicial, setResponsavelMultiInicial] = useState(null);
+
+  // Estado temporário de cópia de telefone nos cards
+  const [copiadoTel, setCopiadoTel] = useState(null);
+
+  const handleCopiarTelefoneDigitos = async (e, tel) => {
+    e.stopPropagation();
+    const digitos = String(tel || '').replace(/\D/g, '');
+    if (!digitos) {
+      return toast.error('Nenhum número disponível para copiar.');
+    }
+    try {
+      await navigator.clipboard.writeText(digitos);
+      setCopiadoTel(tel);
+      toast.success(`Número copiado: ${digitos}`);
+      setTimeout(() => setCopiadoTel(null), 1500);
+    } catch {
+      toast.error('Erro ao copiar número.');
+    }
+  };
 
   // Filtros locais
   const [buscaUnidade, setBuscaUnidade] = useState('');
@@ -105,6 +130,24 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
   }, [unidadesComFalhas]);
   const unidadesContatadas = totalUnidades - unidadesPendentes;
 
+  // Responsáveis qualificados em múltiplas unidades com falhas (dupla validação estrita: Nome + Número)
+  const responsaveisMulti = useMemo(() => {
+    return agruparResponsaveisMultiUnidade(unidadesComFalhas);
+  }, [unidadesComFalhas]);
+
+  // Mapa para identificação imediata das unidades que possuem responsável compartilhado
+  const mapaUnidadeParaResponsaveisMulti = useMemo(() => {
+    const mapa = {};
+    responsaveisMulti.forEach((resp) => {
+      resp.unidades.forEach((u) => {
+        const chave = u.nome_unidade?.trim().toLowerCase();
+        if (!mapa[chave]) mapa[chave] = [];
+        mapa[chave].push(resp);
+      });
+    });
+    return mapa;
+  }, [responsaveisMulti]);
+
   // Filtragem de unidades na tela
   const unidadesFiltradas = useMemo(() => {
     return unidadesComFalhas.filter((u) => {
@@ -147,7 +190,13 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
     setIsModalOpen(true);
   };
 
-  // Callback de sucesso ao copiar mensagem
+  // Abrir modal de contato multi-unidade
+  const abrirModalMulti = (responsavel = null) => {
+    setResponsavelMultiInicial(responsavel);
+    setIsModalMultiOpen(true);
+  };
+
+  // Callback de sucesso ao copiar mensagem individual
   const handleContatadoSucesso = ({ unidade }) => {
     // Atualização otimista: registros pendentes desta unidade viram 'Aguardando Retorno'
     setFalhasLote((prev) =>
@@ -164,6 +213,34 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
     );
 
     // Notifica a tela de Falhas principal para atualizar contadores e tabela
+    if (onAtualizarFalhas) {
+      onAtualizarFalhas();
+    }
+  };
+
+  // Callback de sucesso ao copiar mensagem multi-unidade
+  const handleContatadoMultiSucesso = ({ unidades }) => {
+    const setNomes = new Set(unidades.map((u) => u.trim().toLowerCase()));
+
+    // Atualização otimista: registros pendentes de todas as unidades tratadas viram 'Aguardando Retorno'
+    setFalhasLote((prev) =>
+      prev.map((f) => {
+        const nomeUnidade = f.unidade?.trim().toLowerCase();
+        if (
+          nomeUnidade &&
+          setNomes.has(nomeUnidade) &&
+          (f.status_tratativa === 'Pendente de Contato' || !f.status_tratativa)
+        ) {
+          return {
+            ...f,
+            status_tratativa: 'Aguardando Retorno',
+            data_contato: new Date().toISOString()
+          };
+        }
+        return f;
+      })
+    );
+
     if (onAtualizarFalhas) {
       onAtualizarFalhas();
     }
@@ -227,77 +304,109 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
 
       </div>
 
-      {/* 2. Barra de Filtros e Busca */}
+      {/* 2. Barra de Filtros e Ação Multi-Contato */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-end justify-between gap-3">
           
-          {/* Seletor Unidade */}
-          <div>
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-              Unidade
-            </label>
-            <SearchableSelect
-              placeholder="Todas as Unidades"
-              options={unidadesNomesDisponiveis}
-              value={buscaUnidade}
-              onChange={setBuscaUnidade}
-              icon={Building2}
-            />
-          </div>
-
-          {/* Seletor UF */}
-          <div>
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-              UF
-            </label>
-            <SearchableSelect
-              placeholder="Todos os Estados"
-              options={ufsDisponiveis}
-              value={filtroUF}
-              onChange={setFiltroUF}
-              icon={MapPin}
-            />
-          </div>
-
-          {/* Seletor Responsável */}
-          <div>
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-              Responsável (Unidade)
-            </label>
-            <SearchableSelect
-              placeholder="Todos os Responsáveis"
-              options={responsaveisDisponiveis}
-              value={filtroResponsavel}
-              onChange={setFiltroResponsavel}
-              icon={User}
-            />
-          </div>
-
-          {/* Filtro Rápido de Status */}
-          <div>
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-              Status do Contato
-            </label>
-            <div className="flex bg-slate-100 p-1 rounded-2xl gap-1 h-12 items-center">
-              {[
-                { key: 'todos', label: 'Todos' },
-                { key: 'pendente', label: 'Pendentes' },
-                { key: 'contatado', label: 'Contatados' }
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setFiltroStatus(opt.key)}
-                  className={`flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                    filtroStatus === opt.key
-                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+          {/* Grid dos 4 Filtros Convencionais */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1 items-end">
+            
+            {/* Seletor Unidade */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+                Unidade
+              </label>
+              <SearchableSelect
+                placeholder="Todas as Unidades"
+                options={unidadesNomesDisponiveis}
+                value={buscaUnidade}
+                onChange={setBuscaUnidade}
+                icon={Building2}
+              />
             </div>
+
+            {/* Seletor UF */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+                UF
+              </label>
+              <SearchableSelect
+                placeholder="Todos os Estados"
+                options={ufsDisponiveis}
+                value={filtroUF}
+                onChange={setFiltroUF}
+                icon={MapPin}
+              />
+            </div>
+
+            {/* Seletor Responsável */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+                Responsável (Unidade)
+              </label>
+              <SearchableSelect
+                placeholder="Todos os Responsáveis"
+                options={responsaveisDisponiveis}
+                value={filtroResponsavel}
+                onChange={setFiltroResponsavel}
+                icon={User}
+              />
+            </div>
+
+            {/* Filtro Rápido de Status */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
+                Status do Contato
+              </label>
+              <div className="flex bg-slate-100 p-1 rounded-2xl gap-1 h-12 items-center">
+                {[
+                  { key: 'todos', label: 'Todos' },
+                  { key: 'pendente', label: 'Pendentes' },
+                  { key: 'contatado', label: 'Contatados' }
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setFiltroStatus(opt.key)}
+                    className={`flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      filtroStatus === opt.key
+                        ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Botão de Destaque Contato Multi-Unidade */}
+          <div className="lg:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => abrirModalMulti()}
+              disabled={responsaveisMulti.length === 0}
+              className={`w-full lg:w-auto h-12 px-4.5 flex items-center justify-center gap-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-200 shadow-sm ${
+                responsaveisMulti.length > 0
+                  ? 'bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white shadow-teal-600/20 hover:scale-[1.01] active:scale-[0.99] cursor-pointer'
+                  : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+              }`}
+              title={
+                responsaveisMulti.length > 0
+                  ? `${responsaveisMulti.length} responsável(is) com falhas em 2 ou mais unidades`
+                  : 'Nenhum responsável compartilhado com falhas no lote atual'
+              }
+            >
+              <Layers size={16} className={responsaveisMulti.length > 0 ? 'text-teal-200' : 'text-slate-400'} />
+              <span>Contato Multi-Unidade</span>
+              {responsaveisMulti.length > 0 && (
+                <span className="px-2 py-0.5 bg-white/20 text-white rounded-full text-[10px] font-black">
+                  {responsaveisMulti.length}
+                </span>
+              )}
+            </button>
           </div>
 
         </div>
@@ -342,6 +451,8 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
             }).length;
 
             const contatoPrincipal = contatos.find((c) => c.principal) || contatos[0];
+            const responsaveisMultiDestaUnidade =
+              mapaUnidadeParaResponsaveisMulti[unidade.nome_unidade?.trim().toLowerCase()] || [];
 
             return (
               <div
@@ -446,9 +557,23 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
                               )}
                             </div>
                             {contatoPrincipal.telefone && (
-                              <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 truncate">
-                                <Phone size={9} /> {contatoPrincipal.telefone}
-                              </p>
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                                <Phone size={9} className="shrink-0" />
+                                <span className="truncate">{contatoPrincipal.telefone}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopiarTelefoneDigitos(e, contatoPrincipal.telefone)}
+                                  className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition-colors cursor-pointer ml-0.5"
+                                  title="Copiar número limpo (apenas dígitos)"
+                                  aria-label="Copiar apenas dígitos do número"
+                                >
+                                  {copiadoTel === contatoPrincipal.telefone ? (
+                                    <Check size={10} className="text-emerald-600" />
+                                  ) : (
+                                    <Copy size={10} />
+                                  )}
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -458,6 +583,29 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
                             +{contatos.length - 1} outro{contatos.length - 1 > 1 ? 's' : ''}
                           </span>
                         )}
+                      </div>
+                    )}
+
+                    {/* Chip de Atalho Multi-Contato se a unidade compartilhar responsável */}
+                    {responsaveisMultiDestaUnidade.length > 0 && (
+                      <div className="mt-2.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            abrirModalMulti(responsaveisMultiDestaUnidade[0]);
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-1.5 bg-gradient-to-r from-teal-50 to-emerald-50 hover:from-teal-100 hover:to-emerald-100 border border-teal-200/80 rounded-xl text-teal-800 text-[10px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-xs group"
+                          title={`Abrir Multi-Contato para ${responsaveisMultiDestaUnidade[0].nome} (${responsaveisMultiDestaUnidade[0].totalUnidades} unidades)`}
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Layers size={12} className="text-teal-600 shrink-0 group-hover:rotate-12 transition-transform" />
+                            <span className="truncate">Multi-Contato: {responsaveisMultiDestaUnidade[0].nome}</span>
+                          </div>
+                          <span className="px-1.5 py-0.5 bg-teal-200/70 text-teal-900 rounded font-black text-[9px] shrink-0">
+                            {responsaveisMultiDestaUnidade[0].totalUnidades} un.
+                          </span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -502,6 +650,19 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
         unidadeData={modalData}
         onContatado={handleContatadoSucesso}
         onIrGestaoUnidades={handleIrGestaoUnidades}
+      />
+
+      {/* 5. Modal Contato Multi-Unidade Integrado */}
+      <ModalContatoMultiUnidade
+        isOpen={isModalMultiOpen}
+        onClose={() => {
+          setIsModalMultiOpen(false);
+          setResponsavelMultiInicial(null);
+        }}
+        responsaveisMulti={responsaveisMulti}
+        responsavelInicial={responsavelMultiInicial}
+        loteAtivo={loteAtivo}
+        onContatadoMulti={handleContatadoMultiSucesso}
       />
 
     </div>

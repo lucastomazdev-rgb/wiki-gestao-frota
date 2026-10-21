@@ -7,7 +7,7 @@ import { AlertTriangle, BatteryWarning, Clock, Sparkles, WifiOff } from 'lucide-
  * Layout padronizado com os KPIs da aba de Contato:
  * - Cards em 2 linhas responsivas (Linha 1: 3 cards de visão geral; Linha 2: 2 cards de operação e baterias)
  * - Cores e tipografia elegantes, bordas suaves border-slate-200/80 e sombras discretas
- * - Sem tons de roxo/violeta, preservando o design system moderno
+ * - Alinhado à paleta oficial Teal/Emerald, preservando o design system moderno
  */
 export default function FalhasKpiCards({
   totalFalhas = 0,

@@ -25,9 +25,9 @@ export default function FalhasHeaderActions({
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+            <label htmlFor="lote-select" className="text-[10px] font-black uppercase tracking-wider text-slate-500 cursor-pointer">
               Data da Extração
-            </span>
+            </label>
             {lotes.length > 0 && loteAtivo && lotes[0]?.id === loteAtivo?.id && (
               <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded-full uppercase">
                 Mais Recente
@@ -38,6 +38,8 @@ export default function FalhasHeaderActions({
           {lotes.length > 0 ? (
             <div className="relative mt-0.5">
               <select
+                id="lote-select"
+                aria-label="Selecionar data da extração"
                 value={loteAtivo?.id || ''}
                 onChange={(e) => onSelectLote(e.target.value)}
                 className="bg-slate-50 hover:bg-slate-100 border border-slate-200 font-bold text-slate-900 text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer transition-colors pr-8"

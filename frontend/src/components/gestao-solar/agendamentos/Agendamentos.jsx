@@ -49,7 +49,7 @@ const STATUS_CORES = {
   'Realizado': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Agendado': 'bg-cyan-50 text-cyan-700 border-cyan-200',
   'Aguardando Data': 'bg-amber-50 text-amber-700 border-amber-200',
-  'Aguardando Técnico': 'bg-purple-50 text-purple-700 border-purple-200',
+  'Aguardando Técnico': 'bg-sky-50 text-sky-700 border-sky-200',
   'Frustrado': 'bg-red-50 text-red-700 border-red-200'
 };
 

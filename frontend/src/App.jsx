@@ -44,14 +44,11 @@ const queryClient = new QueryClient({
   }
 });
 
-function parseHash(hash, canAccessSolar) {
+function parseHash(hash) {
   const cleanHash = (hash || '').replace(/^#\/?/, '');
   const parts = cleanHash.split('/').filter(Boolean);
 
   if (parts[0] === 'solar') {
-    if (!canAccessSolar) {
-      return { platformMode: 'wiki', currentTab: 'home', articleSlug: null, solarTab: 'dashboard' };
-    }
     const validSolarTabs = ['dashboard', 'veiculos', 'falhas', 'agendamentos', 'tarefas', 'retiradas', 'tecnicos', 'tutoriais'];
     const solarTab = validSolarTabs.includes(parts[1]) ? parts[1] : 'dashboard';
     return { platformMode: 'gestao_solar', currentTab: 'home', articleSlug: null, solarTab };
@@ -143,13 +140,13 @@ function AppContent() {
   
   const canAccessSolar = user?.role === 'ADMIN' || Boolean(user?.can_access_gestao_solar);
 
-  const initialNav = parseHash(typeof window !== 'undefined' ? window.location.hash : '', false);
+  const initialNav = parseHash(typeof window !== 'undefined' ? window.location.hash : '');
 
   // Platform Mode: 'wiki' | 'gestao_solar'
   const [platformMode, setPlatformMode] = useState(initialNav.platformMode);
 
   // Gestão Solar state
-  const [currentSolarTab, setCurrentSolarTab] = useState(initialNav.solarTab || 'veiculos');
+  const [currentSolarTab, setCurrentSolarTab] = useState(initialNav.solarTab || 'dashboard');
   const [mobileSolarSidebarOpen, setMobileSolarSidebarOpen] = useState(false);
 
   // Wiki Navigation State: 'home' | 'search' | 'downloads' | 'admin' | 'article-detail'
@@ -176,17 +173,21 @@ function AppContent() {
 
   // Se o usuário perder o acesso ou não tiver permissão, garante que fica na wiki
   useEffect(() => {
-    if (!canAccessSolar && platformMode === 'gestao_solar') {
+    if (!loading && user && !canAccessSolar && platformMode === 'gestao_solar') {
       setPlatformMode('wiki');
     }
-  }, [canAccessSolar, platformMode]);
+  }, [loading, user, canAccessSolar, platformMode]);
 
   // Sincronização inicial e listener do hash (navegação via URL direta, links e botões Voltar/Avançar)
   useEffect(() => {
     if (!user) return;
 
     if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '#') {
-      const parsed = parseHash(window.location.hash, canAccessSolar);
+      const parsed = parseHash(window.location.hash);
+      if (parsed.platformMode === 'gestao_solar' && !canAccessSolar) {
+        setPlatformMode('wiki');
+        return;
+      }
       setPlatformMode((prev) => (prev !== parsed.platformMode ? parsed.platformMode : prev));
       setCurrentTab((prev) => (prev !== parsed.currentTab ? parsed.currentTab : prev));
       setSelectedArticleSlug((prev) => (prev !== parsed.articleSlug ? parsed.articleSlug : prev));
@@ -198,7 +199,11 @@ function AppContent() {
     }
 
     const handleHashChange = () => {
-      const parsed = parseHash(window.location.hash, canAccessSolar);
+      const parsed = parseHash(window.location.hash);
+      if (parsed.platformMode === 'gestao_solar' && !canAccessSolar) {
+        setPlatformMode('wiki');
+        return;
+      }
       setPlatformMode((prev) => (prev !== parsed.platformMode ? parsed.platformMode : prev));
       setCurrentTab((prev) => (prev !== parsed.currentTab ? parsed.currentTab : prev));
       setSelectedArticleSlug((prev) => (prev !== parsed.articleSlug ? parsed.articleSlug : prev));

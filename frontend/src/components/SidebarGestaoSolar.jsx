@@ -89,9 +89,15 @@ export default function SidebarGestaoSolar({
 
       {/* Switcher Button: Back to Wiki */}
       <div className="p-3 pb-1 shrink-0">
-        <button
-          onClick={onBackToWiki}
-          className={`w-full flex items-center justify-center gap-2.5 p-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/50 text-amber-400 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xs group cursor-pointer relative ${
+        <a
+          href="#/wiki"
+          onClick={(e) => {
+            if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+              e.preventDefault();
+              onBackToWiki();
+            }
+          }}
+          className={`w-full flex items-center justify-center gap-2.5 p-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/50 text-amber-400 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xs group cursor-pointer relative select-none no-underline ${
             isCollapsed ? 'px-0' : 'px-3.5'
           }`}
           title={isCollapsed ? 'Voltar para a Wiki' : undefined}
@@ -110,7 +116,7 @@ export default function SidebarGestaoSolar({
               <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 bg-slate-800 border-l border-b border-slate-700 rotate-45" />
             </div>
           )}
-        </button>
+        </a>
       </div>
 
       {/* Main Navigation Items */}
@@ -128,12 +134,20 @@ export default function SidebarGestaoSolar({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentSolarTab === item.key;
+          const href = `#/solar/${item.key}`;
+
           return (
             <div key={item.key} className="relative group">
-              <motion.button
+              <motion.a
+                href={href}
                 whileTap={{ scale: 0.96 }}
-                onClick={() => handleTabClick(item.key)}
-                className={`w-full flex items-center p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer relative overflow-hidden ${
+                onClick={(e) => {
+                  if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                    e.preventDefault();
+                    handleTabClick(item.key);
+                  }
+                }}
+                className={`w-full flex items-center p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer relative overflow-hidden select-none no-underline ${
                   isActive 
                     ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-xs' 
                     : 'text-slate-300 hover:bg-white/5 hover:text-white border border-transparent'
@@ -150,7 +164,7 @@ export default function SidebarGestaoSolar({
                 {!isCollapsed && isActive && (
                   <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse shrink-0 ml-2" />
                 )}
-              </motion.button>
+              </motion.a>
 
               {/* Tooltip when collapsed */}
               {isCollapsed && (

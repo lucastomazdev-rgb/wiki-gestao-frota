@@ -28,6 +28,23 @@ export default function ModalContatoWhatsApp({
   const [contatoSelecionado, setContatoSelecionado] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [copiadoTel, setCopiadoTel] = useState(null);
+
+  const handleCopiarTelefoneDigitos = async (e, tel) => {
+    e.stopPropagation();
+    const digitos = String(tel || '').replace(/\D/g, '');
+    if (!digitos) {
+      return toast.error('Nenhum número disponível para copiar.');
+    }
+    try {
+      await navigator.clipboard.writeText(digitos);
+      setCopiadoTel(tel);
+      toast.success(`Número copiado: ${digitos}`);
+      setTimeout(() => setCopiadoTel(null), 1500);
+    } catch {
+      toast.error('Erro ao copiar número.');
+    }
+  };
 
   useEffect(() => {
     if (isOpen && unidadeData) {
@@ -253,10 +270,24 @@ Sabemos que isso costuma acontecer se o veículo estiver parado, na oficina ou c
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-slate-500">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-500 items-center">
                     {contatos[0].telefone && (
-                      <span className="flex items-center gap-1">
-                        <Phone size={10} className="text-slate-400" /> {contatos[0].telefone}
+                      <span className="flex items-center gap-1 font-semibold text-slate-700 bg-white/70 px-2 py-0.5 rounded-lg border border-teal-200/60">
+                        <Phone size={10} className="text-teal-600 shrink-0" />
+                        <span>{contatos[0].telefone}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopiarTelefoneDigitos(e, contatos[0].telefone)}
+                          className="p-1 hover:bg-teal-100 rounded-md text-slate-400 hover:text-teal-700 transition-colors cursor-pointer ml-0.5"
+                          title="Copiar número limpo (apenas dígitos)"
+                          aria-label="Copiar apenas dígitos do número"
+                        >
+                          {copiadoTel === contatos[0].telefone ? (
+                            <Check size={12} className="text-emerald-600" />
+                          ) : (
+                            <Copy size={12} />
+                          )}
+                        </button>
                       </span>
                     )}
                     {contatos[0].email && (
@@ -301,10 +332,24 @@ Sabemos que isso costuma acontecer se o veículo estiver parado, na oficina ou c
                             </span>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-slate-400 font-medium">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-400 font-medium items-center">
                           {c.telefone && (
                             <span className="flex items-center gap-1">
-                              <Phone size={10} /> {c.telefone}
+                              <Phone size={10} className="shrink-0" />
+                              <span>{c.telefone}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopiarTelefoneDigitos(e, c.telefone)}
+                                className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition-colors cursor-pointer ml-0.5"
+                                title="Copiar número limpo (apenas dígitos)"
+                                aria-label="Copiar apenas dígitos do número"
+                              >
+                                {copiadoTel === c.telefone ? (
+                                  <Check size={11} className="text-emerald-600" />
+                                ) : (
+                                  <Copy size={11} />
+                                )}
+                              </button>
                             </span>
                           )}
                           {c.email && (

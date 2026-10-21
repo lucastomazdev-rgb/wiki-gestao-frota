@@ -349,6 +349,47 @@ test('Falhas Contato por Unidade - Atualiza apenas Pendentes para Aguardando Ret
   assert.ok(updates[1].data.data_contato);
 });
 
+test('Falhas Contato Multi-Unidade - Atualiza em lote com { in: unidades } preservando tratativas prévias', async () => {
+  const updates = [];
+  const prisma = {
+    falhas_registros: {
+      updateMany: async ({ where, data }) => {
+        updates.push({ where, data });
+        if (where.status_tratativa === 'Pendente de Contato') {
+          return { count: 6 };
+        }
+        return { count: 3 };
+      }
+    }
+  };
+
+  const app = createMockApp(prisma, mockUserSolar);
+
+  const payload = {
+    lote_id: '11111111-1111-1111-1111-111111111111',
+    unidades: ['Maracanaú', 'Caucaia', 'Sobral'],
+    contato_nome: 'Carlos Silva',
+    contato_telefone: '(85) 99999-1234'
+  };
+
+  const res = await makeRequest(app, 'POST', '/api/gestao-solar/falhas/contato-multi-unidade', payload);
+  assert.equal(res.status, 200);
+  assert.equal(res.data.data.pendentes_atualizados, 6);
+  assert.equal(res.data.data.tratativas_mantidas, 3);
+  assert.deepEqual(res.data.data.unidades, ['Maracanaú', 'Caucaia', 'Sobral']);
+
+  // Verifica que o primeiro update usou operador { in: [...] } e status_tratativa 'Pendente de Contato'
+  assert.deepEqual(updates[0].where.unidade, { in: ['Maracanaú', 'Caucaia', 'Sobral'] });
+  assert.equal(updates[0].where.status_tratativa, 'Pendente de Contato');
+  assert.equal(updates[0].data.status_tratativa, 'Aguardando Retorno');
+
+  // Verifica que o segundo update atuou nos outros registros preservando o status
+  assert.deepEqual(updates[1].where.unidade, { in: ['Maracanaú', 'Caucaia', 'Sobral'] });
+  assert.deepEqual(updates[1].where.status_tratativa, { not: 'Pendente de Contato' });
+  assert.equal(updates[1].data.status_tratativa, undefined);
+  assert.ok(updates[1].data.data_contato);
+});
+
 test('Falhas Importação - Parse de Datas Brasileiras e Serial Excel em ultima_transmissao', async () => {
   let recordsInserted = [];
 

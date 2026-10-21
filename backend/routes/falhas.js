@@ -133,6 +133,14 @@ const contatoUnidadeSchema = z.object({
   observacao: z.string().trim().nullable().optional()
 });
 
+const contatoMultiUnidadeSchema = z.object({
+  lote_id: z.string().uuid('ID do lote inválido.'),
+  unidades: z.array(z.string().trim().min(1, 'Nome de unidade inválido.')).min(1, 'Selecione pelo menos uma unidade.'),
+  contato_nome: z.string().trim().nullable().optional(),
+  contato_telefone: z.string().trim().nullable().optional(),
+  observacao: z.string().trim().nullable().optional()
+});
+
 const loteStaticCache = new Map();
 
 export const clearLoteStaticCache = (loteId = null) => {
@@ -876,6 +884,69 @@ export default function createFalhasRouter(prisma, protect) {
         status: 'success',
         message: `Contato registrado para a unidade ${input.unidade}.`,
         data: {
+          pendentes_atualizados: atualizadosPendentes.count,
+          tratativas_mantidas: mantidosTratativa.count
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // =========================================================================
+  // 4.8 REGISTRAR CONTATO MULTI-UNIDADE (SELETIVO: APENAS PENDENTES MUDAM)
+  // =========================================================================
+  router.post('/falhas/contato-multi-unidade', async (req, res, next) => {
+    try {
+      const input = contatoMultiUnidadeSchema.parse(req.body);
+      const hoje = new Date();
+
+      // 1. Atualizar exclusivamente os registros 'Pendente de Contato' para 'Aguardando Retorno'
+      // para todas as unidades especificadas pertencentes ao lote ativo
+      const atualizadosPendentes = await prisma.falhas_registros.updateMany({
+        where: {
+          lote_id: input.lote_id,
+          unidade: { in: input.unidades },
+          status_tratativa: 'Pendente de Contato'
+        },
+        data: {
+          status_tratativa: 'Aguardando Retorno',
+          data_contato: hoje,
+          ...(input.observacao ? { observacao: input.observacao } : {})
+        }
+      });
+
+      // 2. Veículos com tratativas prévias mantêm sua tratativa, apenas atualizam data_contato
+      const mantidosTratativa = await prisma.falhas_registros.updateMany({
+        where: {
+          lote_id: input.lote_id,
+          unidade: { in: input.unidades },
+          status_tratativa: { not: 'Pendente de Contato' }
+        },
+        data: {
+          data_contato: hoje
+        }
+      });
+
+      recordAuditEvent({
+        action: 'REGISTRAR_CONTATO_MULTI_UNIDADE',
+        performedBy: req.user,
+        target: { type: 'unidades_multi', total_unidades: input.unidades.length, lote_id: input.lote_id },
+        ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+        details: {
+          unidades: input.unidades,
+          contato_nome: input.contato_nome,
+          contato_telefone: input.contato_telefone,
+          pendentes_atualizados: atualizadosPendentes.count,
+          tratativas_mantidas: mantidosTratativa.count
+        }
+      });
+
+      res.status(200).json({
+        status: 'success',
+        message: `Contato multi-unidade registrado para ${input.unidades.length} unidade(s).`,
+        data: {
+          unidades: input.unidades,
           pendentes_atualizados: atualizadosPendentes.count,
           tratativas_mantidas: mantidosTratativa.count
         }
