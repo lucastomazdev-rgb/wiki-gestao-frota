@@ -38,6 +38,8 @@ const FalhasGestaoSolar = lazy(() => import('./components/gestao-solar/falhas/Fa
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutos de dados frescos na memória (navegação instantânea entre abas)
+      gcTime: 10 * 60 * 1000,    // 10 minutos de retenção em cache
       refetchOnWindowFocus: false,
       retry: 1
     }

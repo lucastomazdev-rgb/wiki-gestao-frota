@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import CategoryCard from '../components/CategoryCard';
@@ -15,42 +16,55 @@ export default function Home({
   categories,
   setCategories
 }) {
-  const [articles, setArticles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const toast = useToast();
 
+  const {
+    data: categoriesData = [],
+    isLoading: loadingCats,
+    isError: isErrorCats,
+    refetch: refetchCats
+  } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await api.get('/categories');
+      const cats = res.data?.data?.categories || [];
+      if (setCategories) setCategories(cats);
+      return cats;
+    }
+  });
+
+  const {
+    data: articles = [],
+    isLoading: loadingArts,
+    isError: isErrorArts,
+    refetch: refetchArts
+  } = useQuery({
+    queryKey: ['articles'],
+    queryFn: async () => {
+      const res = await api.get('/articles');
+      return res.data?.data?.articles || [];
+    }
+  });
+
+  const loading = loadingCats || loadingArts;
+  const error = (isErrorCats || isErrorArts)
+    ? 'Não foi possível conectar ao servidor. A Wiki requer conexão de internet ativa.'
+    : '';
+
   const fetchData = async (isManualSync = false) => {
-    setLoading(true);
-    setError('');
     if (isManualSync) {
       toast.info('Sincronizando enciclopédia...');
     }
     try {
-      const [catsRes, artsRes] = await Promise.all([
-        api.get('/categories'),
-        api.get('/articles')
-      ]);
-      if (setCategories) {
-        setCategories(catsRes.data.data.categories || []);
-      }
-      setArticles(artsRes.data.data.articles || []);
+      await Promise.all([refetchCats(), refetchArts()]);
       if (isManualSync) {
         toast.success('Conteúdo sincronizado com sucesso!');
       }
-    } catch (err) {
-      const errMsg = 'Não foi possível conectar ao servidor. A Wiki requer conexão de internet ativa.';
-      setError(errMsg);
-      toast.error(errMsg, 'Erro de Sincronização');
-    } finally {
-      setLoading(false);
+    } catch {
+      toast.error('Erro ao sincronizar enciclopédia.', 'Erro de Sincronização');
     }
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
 
 

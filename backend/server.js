@@ -26,10 +26,12 @@ import createTecnicosTerceirizadosRouter from './routes/tecnicosTerceirizados.js
 import createTarefasRouter from './routes/tarefas.js';
 import createAgendamentosRouter from './routes/agendamentos.js';
 import createFalhasRouter from './routes/falhas.js';
+import { perfTelemetryMiddleware, instrumentPrisma } from './services/perfTelemetry.js';
 
 dotenv.config();
 
-const prisma = new PrismaClient();
+const basePrisma = new PrismaClient();
+const prisma = instrumentPrisma(basePrisma);
 const app = express();
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5000;
@@ -66,6 +68,7 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 
 app.disable('x-powered-by');
 app.use(compression());
+app.use(perfTelemetryMiddleware);
 
 // 🛡️ Security Middleware - Helmet HTTP Headers
 app.use(helmet({
@@ -101,6 +104,44 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
+  });
+});
+
+// 🔍 Endpoint de diagnóstico e medição de latência do Supabase
+app.get('/api/diagnostics/ping', async (req, res) => {
+  const start = performance.now();
+  let dbPingMs = null;
+  let dbError = null;
+
+  try {
+    const dbStart = performance.now();
+    await basePrisma.$queryRaw`SELECT 1 as ping`;
+    dbPingMs = Math.round((performance.now() - dbStart) * 10) / 10;
+  } catch (err) {
+    dbError = err.message;
+  }
+
+  const totalTimeMs = Math.round((performance.now() - start) * 10) / 10;
+  const mem = process.memoryUsage();
+
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    render: {
+      uptimeSeconds: Math.floor(process.uptime()),
+      memoryMB: {
+        rss: Math.round(mem.rss / 1024 / 1024),
+        heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(mem.heapTotal / 1024 / 1024)
+      },
+      nodeVersion: process.version
+    },
+    database: {
+      pingMs: dbPingMs,
+      status: dbError ? 'error' : 'connected',
+      error: dbError
+    },
+    totalDiagnosticTimeMs: totalTimeMs
   });
 });
 
@@ -200,7 +241,8 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Setup-Token']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Setup-Token'],
+  exposedHeaders: ['Server-Timing', 'X-Response-Time', 'X-Database-Time', 'X-Database-Queries']
 }));
 
 app.use(express.json({ limit: '10mb' }));
