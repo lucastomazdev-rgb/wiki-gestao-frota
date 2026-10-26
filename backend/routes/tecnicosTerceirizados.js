@@ -120,6 +120,26 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
   };
 
   // =========================================================================
+  // CACHE EM MEMÓRIA PARA KPIS E LISTA PADRÃO DE TÉCNICOS
+  // =========================================================================
+  let tecnicosCache = { data: null, expiresAt: 0 };
+  let osKpisCache = { data: null, expiresAt: 0 };
+  const TTL_MS = 5 * 60 * 1000; // 5 minutos de TTL
+
+  const invalidateTecnicosCache = () => {
+    tecnicosCache = { data: null, expiresAt: 0 };
+    osKpisCache = { data: null, expiresAt: 0 };
+  };
+
+  // Middleware automático: qualquer mutação invalida o cache
+  router.use((req, res, next) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      invalidateTecnicosCache();
+    }
+    next();
+  });
+
+  // =========================================================================
   // 1. TÉCNICOS TERCEIRIZADOS (CRUD + SERVIÇOS + EQUIPAMENTOS)
   // =========================================================================
 
@@ -127,6 +147,16 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
   router.get('/tecnicos', async (req, res, next) => {
     try {
       const { busca, regiao, homologado } = req.query;
+      const isDefaultList = (!busca || !busca.trim()) && (!regiao || !regiao.trim()) && (homologado === undefined || homologado === '');
+      const now = Date.now();
+
+      if (isDefaultList && tecnicosCache.data && tecnicosCache.expiresAt > now) {
+        return res.status(200).json({
+          status: 'success',
+          data: { tecnicos: tecnicosCache.data }
+        });
+      }
+
       const where = { ativo: true };
 
       if (busca && busca.trim()) {
@@ -161,6 +191,10 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         },
         orderBy: { nome: 'asc' }
       });
+
+      if (isDefaultList) {
+        tecnicosCache = { data: tecnicos, expiresAt: now + TTL_MS };
+      }
 
       res.status(200).json({
         status: 'success',
@@ -896,6 +930,14 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
   // Listar Ordens de Serviço com filtros avançados
   router.get('/ordens-servicos/kpis', async (req, res, next) => {
     try {
+      const now = Date.now();
+      if (osKpisCache.data && osKpisCache.expiresAt > now) {
+        return res.status(200).json({
+          status: 'success',
+          data: osKpisCache.data
+        });
+      }
+
       const [totalTecnicos, totalHomologados, equipment, pendentesDevolucao] = await Promise.all([
         prisma.tecnicos_terceirizados.count({ where: { ativo: true } }),
         prisma.tecnicos_terceirizados.count({ where: { ativo: true, homologado: true } }),
@@ -905,14 +947,18 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         })
       ]);
 
+      const kpisData = {
+        totalTecnicos,
+        totalHomologados,
+        totalEquipamentos: equipment._sum.quantidade || 0,
+        pendentesDevolucao
+      };
+
+      osKpisCache = { data: kpisData, expiresAt: now + TTL_MS };
+
       res.status(200).json({
         status: 'success',
-        data: {
-          totalTecnicos,
-          totalHomologados,
-          totalEquipamentos: equipment._sum.quantidade || 0,
-          pendentesDevolucao
-        }
+        data: kpisData
       });
     } catch (error) {
       next(error);

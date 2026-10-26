@@ -121,15 +121,23 @@ export default function createAgendamentosRouter(prisma, protect) {
 
   router.get('/agendamentos/kpis', async (req, res, next) => {
     try {
-      const [total, realizados, agendados, aguardandoData, aguardandoTecnico, frustrados] = await Promise.all([
-        prisma.agendamentos.count(),
-        prisma.agendamentos.count({ where: { status: 'Realizado' } }),
-        prisma.agendamentos.count({ where: { status: 'Agendado' } }),
-        prisma.agendamentos.count({ where: { status: 'Aguardando Data' } }),
-        prisma.agendamentos.count({ where: { status: 'Aguardando Técnico' } }),
-        prisma.agendamentos.count({ where: { status: 'Frustrado' } })
-      ]);
+      const grouped = await prisma.agendamentos.groupBy({
+        by: ['status'],
+        _count: { _all: true }
+      });
 
+      const countByStatus = {};
+      let total = 0;
+      for (const item of grouped) {
+        countByStatus[item.status] = item._count._all;
+        total += item._count._all;
+      }
+
+      const realizados = countByStatus['Realizado'] || 0;
+      const agendados = countByStatus['Agendado'] || 0;
+      const aguardandoData = countByStatus['Aguardando Data'] || 0;
+      const aguardandoTecnico = countByStatus['Aguardando Técnico'] || 0;
+      const frustrados = countByStatus['Frustrado'] || 0;
       const pendentes = agendados + aguardandoData + aguardandoTecnico;
 
       res.status(200).json({
