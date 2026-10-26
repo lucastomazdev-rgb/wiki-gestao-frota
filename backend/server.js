@@ -718,14 +718,27 @@ app.delete('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next
 });
 
 
-// --- CATEGORIES ROUTES ---
+// --- CATEGORIES ROUTES (COM CACHE EM MEMÓRIA) ---
+let categoriesCache = { data: null, expiresAt: 0 };
+const CATEGORIES_TTL_MS = 5 * 60 * 1000; // 5 minutos de TTL
+
+const invalidateCategoriesCache = () => {
+  categoriesCache = { data: null, expiresAt: 0 };
+};
 
 // Get all categories
 app.get('/api/categories', protect, async (req, res, next) => {
   try {
+    const now = Date.now();
+    if (categoriesCache.data && categoriesCache.expiresAt > now) {
+      return res.status(200).json({ status: 'success', data: { categories: categoriesCache.data } });
+    }
+
     const categories = await prisma.category.findMany({
       orderBy: { name: 'asc' }
     });
+
+    categoriesCache = { data: categories, expiresAt: now + CATEGORIES_TTL_MS };
     res.status(200).json({ status: 'success', data: { categories } });
   } catch (error) {
     next(error);
@@ -747,6 +760,7 @@ app.post('/api/categories', protect, restrictTo('ADMIN'), async (req, res, next)
       }
     });
 
+    invalidateCategoriesCache();
     res.status(201).json({ status: 'success', data: { category } });
   } catch (error) {
     next(error);
@@ -770,6 +784,7 @@ app.put('/api/categories/:id', protect, restrictTo('ADMIN'), async (req, res, ne
       }
     });
 
+    invalidateCategoriesCache();
     res.status(200).json({ status: 'success', data: { category } });
   } catch (error) {
     next(error);
@@ -783,6 +798,7 @@ app.delete('/api/categories/:id', protect, restrictTo('ADMIN'), async (req, res,
     await prisma.category.delete({
       where: { id }
     });
+    invalidateCategoriesCache();
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -819,10 +835,24 @@ app.get('/api/documents/fluxograma-bloqueio-moto', protect, (req, res, next) => 
   });
 });
 
+// --- ARTICLES ROUTES (COM CACHE EM MEMÓRIA) ---
+let articlesListCache = { data: null, expiresAt: 0 };
+const ARTICLES_TTL_MS = 3 * 60 * 1000; // 3 minutos de TTL
+
+const invalidateArticlesCache = () => {
+  articlesListCache = { data: null, expiresAt: 0 };
+};
+
 // Get all articles (with text search & category filter)
 app.get('/api/articles', protect, async (req, res, next) => {
   try {
     const { search, categoryId } = req.query;
+
+    const isDefaultList = (!search || !search.trim()) && !categoryId;
+    const now = Date.now();
+    if (isDefaultList && articlesListCache.data && articlesListCache.expiresAt > now) {
+      return res.status(200).json({ status: 'success', data: { articles: articlesListCache.data } });
+    }
 
     const where = {};
     if (categoryId) {
@@ -856,6 +886,10 @@ app.get('/api/articles', protect, async (req, res, next) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    if (isDefaultList) {
+      articlesListCache = { data: articles, expiresAt: now + ARTICLES_TTL_MS };
+    }
+
     res.status(200).json({ status: 'success', data: { articles } });
   } catch (error) {
     next(error);
@@ -880,11 +914,11 @@ app.get('/api/articles/slug/:slug', protect, async (req, res, next) => {
       return res.status(404).json({ status: 'error', message: 'Artigo não encontrado.' });
     }
 
-    // Increment view count asynchronously
-    await prisma.article.update({
+    // Increment view count asynchronously (não bloqueia resposta HTTP)
+    prisma.article.update({
       where: { id: article.id },
       data: { viewCount: { increment: 1 } }
-    });
+    }).catch(err => console.error('Erro ao incrementar visualizações:', err.message));
 
     res.status(200).json({ status: 'success', data: { article } });
   } catch (error) {
@@ -917,6 +951,7 @@ app.post('/api/articles', protect, restrictTo('ADMIN'), async (req, res, next) =
       }
     });
 
+    invalidateArticlesCache();
     res.status(201).json({ status: 'success', data: { article } });
   } catch (error) {
     next(error);
@@ -954,6 +989,7 @@ app.put('/api/articles/:id', protect, restrictTo('ADMIN'), async (req, res, next
       }
     });
 
+    invalidateArticlesCache();
     res.status(200).json({ status: 'success', data: { article } });
   } catch (error) {
     next(error);
@@ -967,6 +1003,7 @@ app.delete('/api/articles/:id', protect, restrictTo('ADMIN'), async (req, res, n
     await prisma.article.delete({
       where: { id }
     });
+    invalidateArticlesCache();
     res.status(204).send();
   } catch (error) {
     next(error);

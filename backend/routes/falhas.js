@@ -142,10 +142,34 @@ const contatoMultiUnidadeSchema = z.object({
 });
 
 const loteStaticCache = new Map();
+let lotesDisponiveisCache = { data: null, expiresAt: 0 };
 
 export const clearLoteStaticCache = (loteId = null) => {
   if (loteId) loteStaticCache.delete(loteId);
   else loteStaticCache.clear();
+  lotesDisponiveisCache = { data: null, expiresAt: 0 };
+};
+
+const getCachedLotesDisponiveis = async (prisma) => {
+  const now = Date.now();
+  if (lotesDisponiveisCache.data && lotesDisponiveisCache.expiresAt > now) {
+    return lotesDisponiveisCache.data;
+  }
+  const lotes = await prisma.falhas_lotes.findMany({
+    orderBy: { data_extracao: 'desc' },
+    take: 10,
+    select: {
+      id: true,
+      data_extracao: true,
+      descricao: true,
+      total_veiculos: true,
+      novas_falhas: true,
+      recorrentes: true,
+      criado_em: true
+    }
+  });
+  lotesDisponiveisCache = { data: lotes, expiresAt: now + 5 * 60 * 1000 };
+  return lotes;
 };
 
 const getOrComputeLoteStaticMeta = async (prisma, loteId) => {
@@ -423,19 +447,7 @@ export default function createFalhasRouter(prisma, protect) {
           orderBy
         }),
         prisma.falhas_registros.count({ where }),
-        prisma.falhas_lotes.findMany({
-          orderBy: { data_extracao: 'desc' },
-          take: 10,
-          select: {
-            id: true,
-            data_extracao: true,
-            descricao: true,
-            total_veiculos: true,
-            novas_falhas: true,
-            recorrentes: true,
-            criado_em: true
-          }
-        }),
+        getCachedLotesDisponiveis(prisma),
         prisma.falhas_registros.count({
           where: { lote_id: loteAtivo.id, status_tratativa: 'Pendente de Contato' }
         })

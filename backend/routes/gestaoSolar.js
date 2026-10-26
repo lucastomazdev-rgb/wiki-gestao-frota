@@ -40,7 +40,7 @@ export default function createGestaoSolarRouter(prisma, protect) {
   // =========================================================================
   let modelosCache = { data: null, expiresAt: 0 };
   let unidadesCache = { data: null, expiresAt: 0 };
-  const CACHE_TTL_MS = 60 * 1000; // 60 segundos de TTL
+  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos de TTL (invalida imediatamente em mutações)
 
   const invalidateLookupsCache = () => {
     modelosCache = { data: null, expiresAt: 0 };
