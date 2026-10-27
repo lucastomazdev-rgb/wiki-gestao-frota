@@ -6,13 +6,28 @@ import {
   CheckCircle2, Clock, Search, MapPin, User, Users, ExternalLink,
   Star, Phone, Layers, Copy, Check
 } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext';
 import { useUnidadesLookup } from '../../../hooks/useLookups';
 import SearchableSelect from '../../shared/SearchableSelect';
 import ModalContatoWhatsApp from './ModalContatoWhatsApp';
 import ModalContatoMultiUnidade from './ModalContatoMultiUnidade';
 import { agruparResponsaveisMultiUnidade } from '../../../utils/contatoMultiUtils';
 
+const formatarDataSimples = (dataStr) => {
+  if (!dataStr) return '';
+  if (typeof dataStr === 'string' && dataStr.includes('T')) {
+    const [ano, mes, dia] = dataStr.split('T')[0].split('-');
+    if (ano && mes && dia && dia.length === 2 && mes.length === 2) {
+      return `${dia}/${mes}/${ano}`;
+    }
+  }
+  const d = new Date(dataStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
+  const { user } = useAuth();
   const [falhasLote, setFalhasLote] = useState([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -96,6 +111,32 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
         };
       }
       mapa[nome].falhas.push(f);
+    });
+
+    // Identifica o último contato registrado para cada unidade (data e operador mais recentes)
+    Object.values(mapa).forEach((u) => {
+      let dataMaisRecente = null;
+      let timestampMaisRecente = null;
+      let usuarioMaisRecente = null;
+
+      u.falhas.forEach((f) => {
+        if (f.data_contato) {
+          const t = new Date(f.data_contato).getTime();
+          if (!isNaN(t)) {
+            if (timestampMaisRecente === null || t > timestampMaisRecente) {
+              timestampMaisRecente = t;
+              dataMaisRecente = f.data_contato;
+              usuarioMaisRecente = f.usuario_contato || null;
+            } else if (t === timestampMaisRecente && !usuarioMaisRecente && f.usuario_contato) {
+              usuarioMaisRecente = f.usuario_contato;
+            }
+          }
+        }
+      });
+
+      u.ultimoContato = dataMaisRecente
+        ? { data: dataMaisRecente, usuario: usuarioMaisRecente }
+        : null;
     });
 
     return Object.values(mapa).sort((a, b) => a.nome_unidade.localeCompare(b.nome_unidade));
@@ -185,6 +226,7 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
       uf: unidade.uf,
       falhas: unidade.falhas,
       contatos: unidade.contatos,
+      ultimoContato: unidade.ultimoContato,
       lote_id: loteAtivo?.id || 'latest'
     });
     setIsModalOpen(true);
@@ -198,14 +240,20 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
 
   // Callback de sucesso ao copiar mensagem individual
   const handleContatadoSucesso = ({ unidade }) => {
-    // Atualização otimista: registros pendentes desta unidade viram 'Aguardando Retorno'
+    const hojeIso = new Date().toISOString();
+    const nomeOperador = user?.name || user?.nome || user?.email || 'Usuário';
+
+    // Atualização otimista: todos os registros da unidade recebem nova data_contato e usuario_contato
+    // E os que estavam pendentes viram 'Aguardando Retorno'
     setFalhasLote((prev) =>
       prev.map((f) => {
-        if (f.unidade?.trim().toLowerCase() === unidade?.trim().toLowerCase() && f.status_tratativa === 'Pendente de Contato') {
+        if (f.unidade?.trim().toLowerCase() === unidade?.trim().toLowerCase()) {
+          const virouAguardando = f.status_tratativa === 'Pendente de Contato' || !f.status_tratativa;
           return {
             ...f,
-            status_tratativa: 'Aguardando Retorno',
-            data_contato: new Date().toISOString()
+            status_tratativa: virouAguardando ? 'Aguardando Retorno' : f.status_tratativa,
+            data_contato: hojeIso,
+            usuario_contato: nomeOperador
           };
         }
         return f;
@@ -221,20 +269,20 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
   // Callback de sucesso ao copiar mensagem multi-unidade
   const handleContatadoMultiSucesso = ({ unidades }) => {
     const setNomes = new Set(unidades.map((u) => u.trim().toLowerCase()));
+    const hojeIso = new Date().toISOString();
+    const nomeOperador = user?.name || user?.nome || user?.email || 'Usuário';
 
-    // Atualização otimista: registros pendentes de todas as unidades tratadas viram 'Aguardando Retorno'
+    // Atualização otimista: registros das unidades tratadas viram 'Aguardando Retorno' com data e usuário
     setFalhasLote((prev) =>
       prev.map((f) => {
         const nomeUnidade = f.unidade?.trim().toLowerCase();
-        if (
-          nomeUnidade &&
-          setNomes.has(nomeUnidade) &&
-          (f.status_tratativa === 'Pendente de Contato' || !f.status_tratativa)
-        ) {
+        if (nomeUnidade && setNomes.has(nomeUnidade)) {
+          const virouAguardando = f.status_tratativa === 'Pendente de Contato' || !f.status_tratativa;
           return {
             ...f,
-            status_tratativa: 'Aguardando Retorno',
-            data_contato: new Date().toISOString()
+            status_tratativa: virouAguardando ? 'Aguardando Retorno' : f.status_tratativa,
+            data_contato: hojeIso,
+            usuario_contato: nomeOperador
           };
         }
         return f;
@@ -495,6 +543,19 @@ export default function FalhasContatoTab({ loteAtivo, onAtualizarFalhas }) {
                       {foiContatado ? 'Contatada' : `${pendentes} Pendente${pendentes > 1 ? 's' : ''}`}
                     </span>
                   </div>
+
+                  {/* Último Contato Realizado */}
+                  {unidade.ultimoContato?.data && (
+                    <div className="mt-2.5 flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50/90 border border-emerald-200/60 rounded-xl text-[11px] text-emerald-800">
+                      <Clock size={12} className="text-emerald-600 shrink-0" />
+                      <span className="truncate">
+                        Contatado em <span className="font-black text-emerald-900">{formatarDataSimples(unidade.ultimoContato.data)}</span>
+                        {unidade.ultimoContato.usuario && (
+                          <> por <span className="font-black text-emerald-900">{unidade.ultimoContato.usuario}</span></>
+                        )}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Pills por Categoria */}
                   <div className="flex flex-wrap items-center gap-2 mt-3.5">

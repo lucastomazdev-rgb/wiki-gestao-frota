@@ -116,6 +116,7 @@ const updateRegistroSchema = z.object({
   status_tratativa: z.string().trim().min(1).max(100).optional(),
   ordem_servico: z.string().trim().max(100).nullable().optional(),
   data_contato: z.union([z.string(), z.date()]).nullable().optional().transform(parseDateOnly),
+  usuario_contato: z.string().trim().max(150).nullable().optional(),
   observacao: z.string().trim().nullable().optional()
 }).strict();
 
@@ -123,6 +124,7 @@ const updateMassaSchema = z.object({
   ids: z.array(z.string().uuid()).min(1, 'Selecione pelo menos um veículo.'),
   status_tratativa: z.string().trim().min(1).max(100),
   data_contato: z.union([z.string(), z.date()]).nullable().optional().transform(parseDateOnly),
+  usuario_contato: z.string().trim().max(150).nullable().optional(),
   observacao: z.string().trim().nullable().optional()
 });
 
@@ -311,7 +313,9 @@ export default function createFalhasRouter(prisma, protect) {
           unidade: true,
           uf: true,
           tipo_veiculo: true,
-          status_tratativa: true
+          status_tratativa: true,
+          data_contato: true,
+          usuario_contato: true
         },
         orderBy: { unidade: 'asc' }
       });
@@ -739,6 +743,7 @@ export default function createFalhasRouter(prisma, protect) {
           ...(input.status_tratativa !== undefined && { status_tratativa: input.status_tratativa }),
           ...(input.ordem_servico !== undefined && { ordem_servico: input.ordem_servico }),
           ...(input.data_contato !== undefined && { data_contato: input.data_contato }),
+          ...(input.usuario_contato !== undefined && { usuario_contato: input.usuario_contato }),
           ...(input.observacao !== undefined && { observacao: input.observacao })
         }
       });
@@ -815,6 +820,11 @@ export default function createFalhasRouter(prisma, protect) {
       if (input.data_contato !== undefined) {
         updateData.data_contato = input.data_contato;
       }
+      if (input.usuario_contato !== undefined) {
+        updateData.usuario_contato = input.usuario_contato;
+      } else if (input.data_contato !== undefined) {
+        updateData.usuario_contato = req.user?.name || req.user?.email || null;
+      }
       if (input.observacao !== undefined) {
         updateData.observacao = input.observacao;
       }
@@ -853,6 +863,7 @@ export default function createFalhasRouter(prisma, protect) {
     try {
       const input = contatoUnidadeSchema.parse(req.body);
       const hoje = new Date();
+      const nomeUsuario = req.user?.name || req.user?.email || 'Usuário';
 
       // 1. Atualizar exclusivamente os registros 'Pendente de Contato' para 'Aguardando Retorno'
       const atualizadosPendentes = await prisma.falhas_registros.updateMany({
@@ -864,12 +875,13 @@ export default function createFalhasRouter(prisma, protect) {
         data: {
           status_tratativa: 'Aguardando Retorno',
           data_contato: hoje,
+          usuario_contato: nomeUsuario,
           ...(input.observacao ? { observacao: input.observacao } : {})
         }
       });
 
       // 2. Veículos que já tinham outra tratativa prévia (ex: Oficina, Parado, etc.):
-      // Preservam estritamente sua tratativa original, registrando apenas a nova data_contato
+      // Preservam estritamente sua tratativa original, registrando a nova data_contato e usuario_contato
       const mantidosTratativa = await prisma.falhas_registros.updateMany({
         where: {
           lote_id: input.lote_id,
@@ -877,7 +889,8 @@ export default function createFalhasRouter(prisma, protect) {
           status_tratativa: { not: 'Pendente de Contato' }
         },
         data: {
-          data_contato: hoje
+          data_contato: hoje,
+          usuario_contato: nomeUsuario
         }
       });
 
@@ -912,6 +925,7 @@ export default function createFalhasRouter(prisma, protect) {
     try {
       const input = contatoMultiUnidadeSchema.parse(req.body);
       const hoje = new Date();
+      const nomeUsuario = req.user?.name || req.user?.email || 'Usuário';
 
       // 1. Atualizar exclusivamente os registros 'Pendente de Contato' para 'Aguardando Retorno'
       // para todas as unidades especificadas pertencentes ao lote ativo
@@ -924,11 +938,12 @@ export default function createFalhasRouter(prisma, protect) {
         data: {
           status_tratativa: 'Aguardando Retorno',
           data_contato: hoje,
+          usuario_contato: nomeUsuario,
           ...(input.observacao ? { observacao: input.observacao } : {})
         }
       });
 
-      // 2. Veículos com tratativas prévias mantêm sua tratativa, apenas atualizam data_contato
+      // 2. Veículos com tratativas prévias mantêm sua tratativa, apenas atualizam data_contato e usuario_contato
       const mantidosTratativa = await prisma.falhas_registros.updateMany({
         where: {
           lote_id: input.lote_id,
@@ -936,7 +951,8 @@ export default function createFalhasRouter(prisma, protect) {
           status_tratativa: { not: 'Pendente de Contato' }
         },
         data: {
-          data_contato: hoje
+          data_contato: hoje,
+          usuario_contato: nomeUsuario
         }
       });
 

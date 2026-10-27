@@ -10,6 +10,19 @@ import {
 import { formatarPlacasAgrupadas } from '../../../utils/falhasFormatters';
 import { formatarTelefoneExibicao } from '../../../utils/contatoMultiUtils';
 
+const formatarDataSimples = (dataStr) => {
+  if (!dataStr) return '';
+  if (typeof dataStr === 'string' && dataStr.includes('T')) {
+    const [ano, mes, dia] = dataStr.split('T')[0].split('-');
+    if (ano && mes && dia && dia.length === 2 && mes.length === 2) {
+      return `${dia}/${mes}/${ano}`;
+    }
+  }
+  const d = new Date(dataStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 /**
  * ModalContatoMultiUnidade
  *
@@ -463,6 +476,9 @@ Sabemos que isso costuma acontecer se o veículo estiver parado, na oficina ou c
                               </div>
                               <p className="text-[10px] text-slate-400 font-medium mt-0.5">
                                 {pendentesCount} pendente{pendentesCount > 1 ? 's' : ''} de {falhasCount} falha{falhasCount > 1 ? 's' : ''}
+                                {u.ultimoContato?.data && (
+                                  <span className="text-emerald-700 font-semibold"> • Contatado em {formatarDataSimples(u.ultimoContato.data)}</span>
+                                )}
                               </p>
                             </div>
                           </div>

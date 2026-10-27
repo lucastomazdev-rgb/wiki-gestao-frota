@@ -5,9 +5,22 @@ import toast from 'react-hot-toast';
 import {
   X, Copy, Check, MessageCircle, Phone, Mail,
   Truck, Bike, Video, AlertTriangle, CheckCircle2,
-  ExternalLink, Star
+  ExternalLink, Star, Clock
 } from 'lucide-react';
 import { formatarPlacasAgrupadas } from '../../../utils/falhasFormatters';
+
+const formatarDataSimples = (dataStr) => {
+  if (!dataStr) return '';
+  if (typeof dataStr === 'string' && dataStr.includes('T')) {
+    const [ano, mes, dia] = dataStr.split('T')[0].split('-');
+    if (ano && mes && dia && dia.length === 2 && mes.length === 2) {
+      return `${dia}/${mes}/${ano}`;
+    }
+  }
+  const d = new Date(dataStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
 
 /**
  * ModalContatoWhatsApp
@@ -67,6 +80,7 @@ export default function ModalContatoWhatsApp({
     uf = '',
     falhas = [],
     contatos = [],
+    ultimoContato = null,
     lote_id = null
   } = unidadeData || {};
 
@@ -167,6 +181,17 @@ Sabemos que isso costuma acontecer se o veículo estiver parado, na oficina ou c
               <p className="text-xs text-slate-500 font-semibold truncate max-w-[280px]">
                 {nome_unidade}
               </p>
+              {ultimoContato?.data && (
+                <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-medium mt-0.5">
+                  <Clock size={11} className="text-emerald-600 shrink-0" />
+                  <span className="truncate">
+                    Contatado em <strong className="font-black text-emerald-800">{formatarDataSimples(ultimoContato.data)}</strong>
+                    {ultimoContato.usuario ? (
+                      <> por <strong className="font-black text-emerald-800">{ultimoContato.usuario}</strong></>
+                    ) : ''}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <button

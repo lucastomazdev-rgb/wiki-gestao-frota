@@ -347,6 +347,8 @@ test('Falhas Contato por Unidade - Atualiza apenas Pendentes para Aguardando Ret
   assert.deepEqual(updates[1].where.status_tratativa, { not: 'Pendente de Contato' });
   assert.equal(updates[1].data.status_tratativa, undefined); // Não altera status
   assert.ok(updates[1].data.data_contato);
+  assert.equal(updates[0].data.usuario_contato, 'Solar Operator');
+  assert.equal(updates[1].data.usuario_contato, 'Solar Operator');
 });
 
 test('Falhas Contato Multi-Unidade - Atualiza em lote com { in: unidades } preservando tratativas prévias', async () => {
@@ -388,6 +390,8 @@ test('Falhas Contato Multi-Unidade - Atualiza em lote com { in: unidades } prese
   assert.deepEqual(updates[1].where.status_tratativa, { not: 'Pendente de Contato' });
   assert.equal(updates[1].data.status_tratativa, undefined);
   assert.ok(updates[1].data.data_contato);
+  assert.equal(updates[0].data.usuario_contato, 'Solar Operator');
+  assert.equal(updates[1].data.usuario_contato, 'Solar Operator');
 });
 
 test('Falhas Importação - Parse de Datas Brasileiras e Serial Excel em ultima_transmissao', async () => {
@@ -505,6 +509,7 @@ test('Falhas Resumo Contatos - Retorna registros leves com 6 colunas para agrupa
   assert.equal(res.data.data.length, 1);
   assert.equal(res.data.data[0].placa, 'ABC1234');
   assert.ok(selectCaptured.placa && selectCaptured.unidade && selectCaptured.status_tratativa);
+  assert.ok(selectCaptured.data_contato && selectCaptured.usuario_contato);
   assert.equal(selectCaptured.observacao, undefined, 'Não deve carregar campos pesados desnecessários');
 });
 
