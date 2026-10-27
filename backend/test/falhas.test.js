@@ -513,3 +513,54 @@ test('Falhas Resumo Contatos - Retorna registros leves com 6 colunas para agrupa
   assert.equal(selectCaptured.observacao, undefined, 'Não deve carregar campos pesados desnecessários');
 });
 
+test('Falhas Agendamentos - Cruzamento inteligente retorna agendamento ativo com precedência sobre histórico', async () => {
+  const registrosSimulados = [
+    { id: '1', placa: 'ABC1234', uf: 'CE', unidade: 'Fortaleza', tipo_veiculo: 'CAMINHAO', tipo_falha: 'NOVA FALHA', status_tratativa: 'Aguardando Técnico' },
+    { id: '2', placa: 'XYZ9876', uf: 'CE', unidade: 'Sobral', tipo_veiculo: 'MOTO', tipo_falha: 'FALHA RECORRENTE', status_tratativa: 'Agendado Manutenção' }
+  ];
+
+  const agendamentosSimulados = [
+    { id: 'ag-antigo', placa: 'ABC1234', status: 'Realizado', data_agendamento: new Date('2026-06-01'), servico: 'Manutenção', nome_tecnico: 'Téc Antigo', criado_em: new Date('2026-06-01') },
+    { id: 'ag-ativo', placa: 'ABC1234', status: 'Agendado', data_agendamento: new Date('2026-10-30'), servico: 'Manutenção', nome_tecnico: 'Carlos Silva', criado_em: new Date('2026-10-27') },
+    { id: 'ag-sobral', placa: 'XYZ9876', status: 'Aguardando Data', data_agendamento: null, servico: 'Retirada', nome_tecnico: 'José Lima', criado_em: new Date('2026-10-26') }
+  ];
+
+  const prisma = {
+    falhas_lotes: {
+      findFirst: async () => ({ id: 'lote-1', data_extracao: new Date('2026-10-15') }),
+      findUnique: async () => ({ id: 'lote-1', data_extracao: new Date('2026-10-15') }),
+      findMany: async () => [{ id: 'lote-1', data_extracao: new Date('2026-10-15') }]
+    },
+    falhas_registros: {
+      findMany: async () => registrosSimulados,
+      count: async () => registrosSimulados.length
+    },
+    agendamentos: {
+      findMany: async ({ where }) => {
+        const placasWhere = where.placa.in;
+        return agendamentosSimulados.filter(a => placasWhere.includes(a.placa));
+      }
+    }
+  };
+
+  const app = createMockApp(prisma, mockUserSolar);
+  const res = await makeRequest(app, 'GET', '/api/gestao-solar/falhas?lote_id=lote-1');
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.status, 'success');
+  const regs = res.data.data.registros;
+  assert.equal(regs.length, 2);
+
+  // ABC1234 tem dois agendamentos: o 'Agendado' (ativo) deve ter precedência sobre o 'Realizado' (histórico)
+  const regABC = regs.find(r => r.placa === 'ABC1234');
+  assert.ok(regABC.agendamento, 'Deve possuir agendamento associado');
+  assert.equal(regABC.agendamento.id, 'ag-ativo');
+  assert.equal(regABC.agendamento.status, 'Agendado');
+  assert.equal(regABC.agendamento.nome_tecnico, 'Carlos Silva');
+
+  // XYZ9876 tem agendamento Aguardando Data
+  const regXYZ = regs.find(r => r.placa === 'XYZ9876');
+  assert.ok(regXYZ.agendamento);
+  assert.equal(regXYZ.agendamento.status, 'Aguardando Data');
+});
+

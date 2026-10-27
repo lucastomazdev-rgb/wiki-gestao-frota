@@ -27,7 +27,8 @@ const createAgendamentoSchema = z.object({
   tecnico_id: z.string().uuid('ID do técnico deve ser um UUID válido.'),
   status: z.enum(VALID_STATUSES).default('Agendado'),
   motivo_frustrado: z.string().trim().nullable().optional(),
-  observacoes: z.string().trim().nullable().optional()
+  observacoes: z.string().trim().nullable().optional(),
+  falha_id: z.string().uuid().nullable().optional()
 }).strict();
 
 const updateAgendamentoSchema = createAgendamentoSchema.partial().extend({
@@ -121,10 +122,29 @@ export default function createAgendamentosRouter(prisma, protect) {
 
   router.get('/agendamentos/kpis', async (req, res, next) => {
     try {
-      const grouped = await prisma.agendamentos.groupBy({
-        by: ['status'],
-        _count: { _all: true }
-      });
+      let grouped = [];
+      if (typeof prisma.agendamentos.groupBy === 'function') {
+        grouped = await prisma.agendamentos.groupBy({
+          by: ['status'],
+          _count: { _all: true }
+        });
+      } else if (typeof prisma.agendamentos.count === 'function') {
+        const [totalCount, realizadosCount, agendadosCount, aguardandoDataCount, aguardandoTecnicoCount, frustradosCount] = await Promise.all([
+          prisma.agendamentos.count(),
+          prisma.agendamentos.count({ where: { status: 'Realizado' } }),
+          prisma.agendamentos.count({ where: { status: 'Agendado' } }),
+          prisma.agendamentos.count({ where: { status: 'Aguardando Data' } }),
+          prisma.agendamentos.count({ where: { status: 'Aguardando Técnico' } }),
+          prisma.agendamentos.count({ where: { status: 'Frustrado' } })
+        ]);
+        grouped = [
+          { status: 'Realizado', _count: { _all: realizadosCount } },
+          { status: 'Agendado', _count: { _all: agendadosCount } },
+          { status: 'Aguardando Data', _count: { _all: aguardandoDataCount } },
+          { status: 'Aguardando Técnico', _count: { _all: aguardandoTecnicoCount } },
+          { status: 'Frustrado', _count: { _all: frustradosCount } }
+        ];
+      }
 
       const countByStatus = {};
       let total = 0;
@@ -376,6 +396,32 @@ export default function createAgendamentosRouter(prisma, protect) {
           tecnico_terceirizado: true
         }
       });
+
+      // Sincronização automática com a tabela de Falhas de Comunicação
+      try {
+        if (input.falha_id) {
+          await prisma.falhas_registros.update({
+            where: { id: input.falha_id },
+            data: {
+              status_tratativa: 'Agendado Manutenção',
+              ...(input.numero_os ? { ordem_servico: input.numero_os } : {})
+            }
+          });
+        } else if (input.placa) {
+          await prisma.falhas_registros.updateMany({
+            where: {
+              placa: input.placa,
+              status_tratativa: { in: ['Aguardando Técnico', 'Pendente de Contato'] }
+            },
+            data: {
+              status_tratativa: 'Agendado Manutenção',
+              ...(input.numero_os ? { ordem_servico: input.numero_os } : {})
+            }
+          });
+        }
+      } catch (falhaSyncErr) {
+        console.warn('[SYNC_FALHA_WARN] Não foi possível sincronizar falha:', falhaSyncErr.message);
+      }
 
       res.status(201).json({
         status: 'success',

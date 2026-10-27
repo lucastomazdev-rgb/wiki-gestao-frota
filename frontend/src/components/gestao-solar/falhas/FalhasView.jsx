@@ -14,6 +14,7 @@ import FalhasTabs from './FalhasTabs';
 import FalhasContatoTab from './FalhasContatoTab';
 
 const ModalImportarFalhas = lazy(() => import('./ModalImportarFalhas'));
+const ModalNovoAgendamento = lazy(() => import('../agendamentos/ModalNovoAgendamento'));
 
 export default function FalhasView() {
   // Lotes e histórico
@@ -63,6 +64,53 @@ export default function FalhasView() {
   const [isBaixarModalOpen, setIsBaixarModalOpen] = useState(false);
   const [isMassaModalOpen, setIsMassaModalOpen] = useState(false);
   const [registroParaEditar, setRegistroParaEditar] = useState(null);
+
+  // Modal de criação de agendamento por placa da falha
+  const [agendamentoModalData, setAgendamentoModalData] = useState(null);
+  const [isAgendamentoModalOpen, setIsAgendamentoModalOpen] = useState(false);
+
+  const handleAbrirAgendamento = (registro) => {
+    setAgendamentoModalData({
+      falha_id: registro.id,
+      placa: registro.placa,
+      unidade: registro.unidade,
+      uf: registro.uf,
+      tipo_veiculo: registro.tipo_veiculo,
+      numero_os: registro.ordem_servico,
+      servico: 'Manutenção'
+    });
+    setIsAgendamentoModalOpen(true);
+  };
+
+  const handleAgendamentoSucesso = (novoAgendamento) => {
+    if (novoAgendamento?.placa) {
+      const pNorm = String(novoAgendamento.placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      setRegistros((prev) =>
+        prev.map((r) => {
+          const rNorm = String(r.placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+          if (rNorm === pNorm) {
+            return {
+              ...r,
+              status_tratativa: 'Agendado Manutenção',
+              ordem_servico: novoAgendamento.numero_os || r.ordem_servico,
+              agendamento: {
+                id: novoAgendamento.id,
+                status: novoAgendamento.status || 'Agendado',
+                data_agendamento: novoAgendamento.data_agendamento || null,
+                servico: novoAgendamento.servico || 'Manutenção',
+                tipo_tecnico: novoAgendamento.tipo_tecnico,
+                nome_tecnico: novoAgendamento.nome_tecnico,
+                numero_os: novoAgendamento.numero_os,
+                criado_em: new Date().toISOString()
+              }
+            };
+          }
+          return r;
+        })
+      );
+    }
+    carregarFalhas(null, false);
+  };
 
   const abortControllerRef = useRef(null);
 
@@ -257,10 +305,11 @@ export default function FalhasView() {
             carregando={carregando}
           />
 
-          {/* 5. Tabela de Registros com Badges de Nova vs Recorrente */}
+          {/* 5. Tabela de Registros com Badges de Nova vs Recorrente e Coluna de Agendamento */}
           <FalhasTable
             registros={registros}
             onEditRegistro={(reg) => setRegistroParaEditar(reg)}
+            onAbrirAgendamento={handleAbrirAgendamento}
             carregando={carregando}
           />
 
@@ -308,6 +357,21 @@ export default function FalhasView() {
         unidadesDisponiveis={filtrosDisponiveis.unidades}
         onSucesso={() => carregarFalhas()}
       />
+
+      {/* Modal Novo Agendamento acionado por placa de Falha */}
+      {isAgendamentoModalOpen && (
+        <Suspense fallback={null}>
+          <ModalNovoAgendamento
+            isOpen={isAgendamentoModalOpen}
+            onClose={() => {
+              setIsAgendamentoModalOpen(false);
+              setAgendamentoModalData(null);
+            }}
+            dadosIniciais={agendamentoModalData}
+            onSuccess={handleAgendamentoSucesso}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

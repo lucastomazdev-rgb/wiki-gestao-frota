@@ -40,6 +40,7 @@ export default function ModalNovoAgendamento({
   isOpen,
   onClose,
   agendamentoParaEditar = null,
+  dadosIniciais = null,
   onSuccess
 }) {
   const [dataAgendamento, setDataAgendamento] = useState('');
@@ -154,6 +155,22 @@ export default function ModalNovoAgendamento({
       setMotivoFrustrado(agendamentoParaEditar.motivo_frustrado || '');
       setObservacoes(agendamentoParaEditar.observacoes || '');
       setPlacaStatus(null);
+    } else if (dadosIniciais) {
+      resetarFormulario();
+      const placaFormatada = formatPlate(dadosIniciais.placa || '');
+      setPlaca(placaFormatada);
+      setUnidade(dadosIniciais.unidade || '');
+      setUf(dadosIniciais.uf || '');
+      setTipoVeiculo(dadosIniciais.tipo_veiculo || '');
+      setNumeroOs(dadosIniciais.numero_os || '');
+      setServico(dadosIniciais.servico || 'Manutenção');
+      if (dadosIniciais.nome_responsavel) setNomeResponsavel(dadosIniciais.nome_responsavel);
+      if (dadosIniciais.contato_responsavel) setContatoResponsavel(formatPhone(dadosIniciais.contato_responsavel));
+
+      // Se informou placa mas não veio com responsável, busca dados do veículo
+      if (placaFormatada && placaFormatada.length >= 5 && !dadosIniciais.nome_responsavel) {
+        buscarDadosPlaca(placaFormatada);
+      }
     } else {
       resetarFormulario();
     }
@@ -164,7 +181,7 @@ export default function ModalNovoAgendamento({
         setTecnicoId(prev => prev || (listaCorpvs && listaCorpvs.length > 0 ? listaCorpvs[0].id : ''));
       }
     });
-  }, [isOpen, agendamentoParaEditar]);
+  }, [isOpen, agendamentoParaEditar, dadosIniciais]);
 
   // Se trocar o tipo de técnico, ajusta o primeiro id selecionado
   const handleTrocaTipoTecnico = (novoTipo) => {
@@ -311,6 +328,7 @@ export default function ModalNovoAgendamento({
     }
 
     const payload = {
+      ...(dadosIniciais?.falha_id ? { falha_id: dadosIniciais.falha_id } : {}),
       data_agendamento: dataAgendamento || null,
       placa: limpaPlaca,
       unidade: unidade.trim() || null,
@@ -331,16 +349,18 @@ export default function ModalNovoAgendamento({
       setSalvandoAgendamento(true);
 
       if (agendamentoParaEditar) {
-        await api.put(`/gestao-solar/agendamentos/${agendamentoParaEditar.id}`, payload);
+        const res = await api.put(`/gestao-solar/agendamentos/${agendamentoParaEditar.id}`, payload);
         toast.success('Agendamento atualizado com sucesso!');
+        resetarFormulario();
+        if (onSuccess) onSuccess(res.data?.data?.agendamento || payload);
+        onClose();
       } else {
-        await api.post('/gestao-solar/agendamentos', payload);
+        const res = await api.post('/gestao-solar/agendamentos', payload);
         toast.success('Agendamento registrado com sucesso!');
+        resetarFormulario();
+        if (onSuccess) onSuccess(res.data?.data?.agendamento || payload);
+        onClose();
       }
-
-      resetarFormulario();
-      if (onSuccess) onSuccess();
-      onClose();
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || 'Erro ao salvar agendamento.');

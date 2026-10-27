@@ -457,6 +457,78 @@ export default function createFalhasRouter(prisma, protect) {
         })
       ]);
 
+      // 7. Cruzamento inteligente de agendamentos para as placas da página atual
+      const mapaPlacasBusca = new Set();
+      registros.forEach(r => {
+        if (r.placa) {
+          mapaPlacasBusca.add(r.placa.trim());
+          mapaPlacasBusca.add(normalizePlate(r.placa));
+        }
+      });
+      const listaPlacas = Array.from(mapaPlacasBusca).filter(Boolean);
+
+      const agendamentosMap = new Map();
+      if (prisma.agendamentos && listaPlacas.length > 0) {
+        const agendamentosEncontrados = await prisma.agendamentos.findMany({
+          where: {
+            placa: { in: listaPlacas }
+          },
+          select: {
+            id: true,
+            placa: true,
+            data_agendamento: true,
+            status: true,
+            servico: true,
+            tipo_tecnico: true,
+            nome_tecnico: true,
+            numero_os: true,
+            criado_em: true
+          },
+          orderBy: [
+            { data_agendamento: 'desc' },
+            { criado_em: 'desc' }
+          ]
+        });
+
+        // Regra de prioridade:
+        // Status ativo ('Agendado', 'Aguardando Data', 'Aguardando Técnico') tem precedência sobre status concluído
+        const STATUS_ATIVOS = new Set(['Agendado', 'Aguardando Data', 'Aguardando Técnico']);
+
+        agendamentosEncontrados.forEach(ag => {
+          const pNorm = normalizePlate(ag.placa);
+          const atual = agendamentosMap.get(pNorm);
+
+          if (!atual) {
+            agendamentosMap.set(pNorm, ag);
+          } else {
+            const atualIsAtivo = STATUS_ATIVOS.has(atual.status);
+            const novoIsAtivo = STATUS_ATIVOS.has(ag.status);
+
+            if (!atualIsAtivo && novoIsAtivo) {
+              agendamentosMap.set(pNorm, ag);
+            }
+          }
+        });
+      }
+
+      const registrosComAgendamento = registros.map(r => {
+        const pNorm = normalizePlate(r.placa);
+        const ag = agendamentosMap.get(pNorm) || null;
+        return {
+          ...r,
+          agendamento: ag ? {
+            id: ag.id,
+            status: ag.status,
+            data_agendamento: ag.data_agendamento,
+            servico: ag.servico,
+            tipo_tecnico: ag.tipo_tecnico,
+            nome_tecnico: ag.nome_tecnico,
+            numero_os: ag.numero_os,
+            criado_em: ag.criado_em
+          } : null
+        };
+      });
+
       const totalPages = Math.ceil(totalFiltrado / numLimit) || 1;
       const totalVeiculosLote = loteAtivo.total_veiculos !== undefined && loteAtivo.total_veiculos !== null
         ? loteAtivo.total_veiculos
@@ -467,7 +539,7 @@ export default function createFalhasRouter(prisma, protect) {
         data: {
           lote: loteAtivo,
           lotes: lotesDisponiveis,
-          registros,
+          registros: registrosComAgendamento,
           kpis: {
             total: totalVeiculosLote,
             novas_falhas: loteAtivo.novas_falhas ?? 0,

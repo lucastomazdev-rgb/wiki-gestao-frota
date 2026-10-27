@@ -1,5 +1,8 @@
 import React from 'react';
-import { Edit, Sparkles, AlertTriangle, Truck, MapPin, Calendar, Clock, BatteryWarning } from 'lucide-react';
+import {
+  Edit, Sparkles, AlertTriangle, Truck, MapPin, Calendar, Clock,
+  BatteryWarning, CalendarPlus, CheckCircle2
+} from 'lucide-react';
 
 const isBateriaBaixa = (val) => {
   if (val === null || val === undefined || val === '') return false;
@@ -28,6 +31,16 @@ const classeTratativa = (tratativa) => {
   return 'bg-teal-50 text-teal-700 border-teal-200';
 };
 
+const classeAgendamento = (status) => {
+  const s = String(status || '').trim();
+  if (s === 'Agendado') return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+  if (s === 'Aguardando Data') return 'bg-teal-50 text-teal-800 border-teal-200';
+  if (s === 'Aguardando Técnico') return 'bg-amber-50 text-amber-800 border-amber-200';
+  if (s === 'Realizado') return 'bg-slate-100 text-slate-700 border-slate-200';
+  if (s === 'Frustrado') return 'bg-rose-50 text-rose-700 border-rose-200';
+  return 'bg-slate-50 text-slate-600 border-slate-200';
+};
+
 const formatarDataHora = (dataStr) => {
   if (!dataStr) return '-';
   const d = new Date(dataStr);
@@ -49,6 +62,7 @@ const formatarDataSimples = (dataStr) => {
 export default function FalhasTable({
   registros = [],
   onEditRegistro,
+  onAbrirAgendamento,
   carregando = false
 }) {
   if (carregando) {
@@ -164,6 +178,56 @@ export default function FalhasTable({
                   </span>
                 </div>
               )}
+
+              {/* Bloco de Agendamento Mobile */}
+              {(() => {
+                const ag = item.agendamento;
+                const precisaAgendamento = item.status_tratativa === 'Aguardando Técnico' || item.status_tratativa === 'Agendado Manutenção';
+                const STATUS_ATIVOS = ['Agendado', 'Aguardando Data', 'Aguardando Técnico'];
+                const temAtivo = ag && STATUS_ATIVOS.includes(ag.status);
+
+                if (temAtivo) {
+                  return (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Agendamento:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${classeAgendamento(ag.status)}`}>
+                        {ag.status === 'Agendado' && ag.data_agendamento
+                          ? `Agendado: ${formatarDataSimples(ag.data_agendamento)}`
+                          : ag.status}
+                      </span>
+                    </div>
+                  );
+                }
+
+                if (precisaAgendamento) {
+                  return (
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Agendamento:</span>
+                      <button
+                        type="button"
+                        onClick={() => onAbrirAgendamento?.(item)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-teal-50 to-emerald-50 hover:from-teal-100 hover:to-emerald-100 border border-teal-300 text-teal-800 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
+                      >
+                        <CalendarPlus size={11} className="text-teal-600" />
+                        Abrir Agendamento
+                      </button>
+                    </div>
+                  );
+                }
+
+                if (ag) {
+                  return (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Histórico:</span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {ag.status} {ag.data_agendamento ? `(${formatarDataSimples(ag.data_agendamento)})` : ''}
+                      </span>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
             </div>
 
             {/* Botão de Ação */}
@@ -192,6 +256,7 @@ export default function FalhasTable({
               <th className="px-4 py-3.5">Última Transmissão</th>
               <th className="px-3 py-3.5 text-center">Bateria</th>
               <th className="px-4 py-3.5">Tratativa Atual</th>
+              <th className="px-4 py-3.5">Agendamento</th>
               <th className="px-4 py-3.5">Ordem de Serviço</th>
               <th className="px-4 py-3.5 text-right">Ações</th>
             </tr>
@@ -295,6 +360,70 @@ export default function FalhasTable({
                         Contato: {formatarDataSimples(item.data_contato)}
                       </span>
                     )}
+                  </td>
+
+                  {/* Agendamento */}
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    {(() => {
+                      const ag = item.agendamento;
+                      const precisaAgendamento = item.status_tratativa === 'Aguardando Técnico' || item.status_tratativa === 'Agendado Manutenção';
+                      const STATUS_ATIVOS = ['Agendado', 'Aguardando Data', 'Aguardando Técnico'];
+                      const temAtivo = ag && STATUS_ATIVOS.includes(ag.status);
+
+                      if (temAtivo) {
+                        return (
+                          <div>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border shadow-2xs ${classeAgendamento(ag.status)}`}>
+                              <Calendar size={11} className="shrink-0" />
+                              {ag.status === 'Agendado' && ag.data_agendamento
+                                ? `Agendado: ${formatarDataSimples(ag.data_agendamento)}`
+                                : ag.status}
+                            </span>
+                            {ag.nome_tecnico && (
+                              <span className="block text-[10px] text-slate-400 font-medium mt-0.5 truncate max-w-[140px]" title={ag.nome_tecnico}>
+                                Téc: {ag.nome_tecnico}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (precisaAgendamento) {
+                        return (
+                          <div className="flex flex-col gap-1 items-start">
+                            <button
+                              type="button"
+                              onClick={() => onAbrirAgendamento?.(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-teal-50 to-emerald-50 hover:from-teal-100 hover:to-emerald-100 border border-teal-300 text-teal-800 hover:text-teal-950 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer shadow-2xs hover:scale-102 active:scale-98"
+                              title="Criar novo agendamento para este veículo"
+                            >
+                              <CalendarPlus size={12} className="text-teal-600 shrink-0" />
+                              Abrir Agendamento
+                            </button>
+                            {ag && (
+                              <span className="text-[9px] text-slate-400 font-medium">
+                                Histórico: {ag.status} {ag.data_agendamento ? `(${formatarDataSimples(ag.data_agendamento)})` : ''}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (ag) {
+                        return (
+                          <div>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">
+                              <CheckCircle2 size={10} className="text-slate-400" />
+                              {ag.status} {ag.data_agendamento ? `(${formatarDataSimples(ag.data_agendamento)})` : ''}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <span className="text-slate-300 text-xs">—</span>
+                      );
+                    })()}
                   </td>
 
                   {/* O.S. */}
