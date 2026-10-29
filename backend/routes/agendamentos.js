@@ -186,10 +186,10 @@ export default function createAgendamentosRouter(prisma, protect) {
     try {
       const registros = await prisma.agendamentos.findMany({
         where: {
-          unidade: { not: null }
+          OR: [{ unidade: { not: null } }, { uf: { not: null } }]
         },
-        select: { unidade: true },
-        distinct: ['unidade'],
+        select: { unidade: true, uf: true },
+        distinct: ['unidade', 'uf'],
         orderBy: { unidade: 'asc' }
       });
 
@@ -200,7 +200,14 @@ export default function createAgendamentosRouter(prisma, protect) {
 
       res.status(200).json({
         status: 'success',
-        data: { unidades: lista }
+        data: {
+          unidades: lista,
+          ufs: registros
+            .map(r => r.uf?.trim().toUpperCase())
+            .filter(Boolean)
+            .filter((val, idx, self) => self.indexOf(val) === idx)
+            .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        }
       });
     } catch (error) {
       next(error);
@@ -219,6 +226,7 @@ export default function createAgendamentosRouter(prisma, protect) {
         servico,
         tipo_tecnico,
         unidade,
+        uf,
         data_inicio,
         data_fim,
         page,
@@ -227,12 +235,26 @@ export default function createAgendamentosRouter(prisma, protect) {
 
       const where = {};
 
-      if (status && status.trim()) {
-        where.status = status.trim();
+      if (status && (Array.isArray(status) || String(status).trim())) {
+        const statusList = (Array.isArray(status) ? status : String(status).split(','))
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (statusList.length === 1) {
+          where.status = statusList[0];
+        } else if (statusList.length > 1) {
+          where.status = { in: statusList };
+        }
       }
 
-      if (servico && servico.trim()) {
-        where.servico = servico.trim();
+      if (servico && (Array.isArray(servico) || String(servico).trim())) {
+        const servicoList = (Array.isArray(servico) ? servico : String(servico).split(','))
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (servicoList.length === 1) {
+          where.servico = servicoList[0];
+        } else if (servicoList.length > 1) {
+          where.servico = { in: servicoList };
+        }
       }
 
       if (tipo_tecnico && tipo_tecnico.trim()) {
@@ -241,6 +263,10 @@ export default function createAgendamentosRouter(prisma, protect) {
 
       if (unidade && unidade.trim()) {
         where.unidade = { equals: unidade.trim(), mode: 'insensitive' };
+      }
+
+      if (uf && String(uf).trim()) {
+        where.uf = { equals: String(uf).trim().toUpperCase(), mode: 'insensitive' };
       }
 
       if (busca && busca.trim()) {

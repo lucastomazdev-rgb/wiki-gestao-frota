@@ -231,6 +231,18 @@ function AppContent() {
   // Technical PDF manuals data for downloads tab
   const technicalFiles = [
     {
+      id: 'knov-gravar-senha-cartao',
+      title: 'Leitor RFID Knov: Gravar Senha no Cartão (Modo Restrito)',
+      category: 'Equipamentos e Periféricos',
+      type: 'MANUAL OPERACIONAL',
+      description: 'Procedimento de bancada via QCOM V1.6 para gravação da senha CORPVS (CRPV) em cartões RFID 13,56 MHz e configuração do modo restrito (#RESTRICT) nos leitores Knov KN01/KN03.',
+      apiPath: '/documents/knov-gravar-senha-cartao',
+      downloadFilename: 'Knov Gravar Senha Cartao.pdf',
+      fallbackUrl: '/documents/knov_gravar_senha_cartao.pdf',
+      size: '2.5 MB',
+      updatedAt: 'Oficial'
+    },
+    {
       id: 'guia-operacional-ccr',
       title: 'Guia Operacional de Acesso ao CCR',
       category: 'Procedimentos Operacionais',

@@ -146,3 +146,34 @@ test('Agendamentos KPIs - Contagem agrupada correta de status', async () => {
   assert.equal(res.data.data.pendentes, 5); // 3 + 1 + 1
   assert.equal(res.data.data.frustrados, 1);
 });
+
+test('Agendamentos List - Suporta múltiplos filtros de status e serviço', async () => {
+  let capturedWhere = null;
+  const prisma = {
+    agendamentos: {
+      count: async ({ where }) => {
+        capturedWhere = where;
+        return 2;
+      },
+      findMany: async ({ where }) => {
+        capturedWhere = where;
+        return [
+          { id: '1', status: 'Agendado', servico: 'Manutenção' },
+          { id: '2', status: 'Frustrado', servico: 'Instalação' }
+        ];
+      }
+    }
+  };
+
+  const app = createMockApp(prisma, mockUserSolar);
+  const res = await makeRequest(
+    app,
+    'GET',
+    '/api/gestao-solar/agendamentos?status=Agendado,Frustrado&servico=Manuten%C3%A7%C3%A3o,Instala%C3%A7%C3%A3o&uf=ce'
+  );
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(capturedWhere.status, { in: ['Agendado', 'Frustrado'] });
+  assert.deepEqual(capturedWhere.servico, { in: ['Manutenção', 'Instalação'] });
+  assert.deepEqual(capturedWhere.uf, { equals: 'CE', mode: 'insensitive' });
+});

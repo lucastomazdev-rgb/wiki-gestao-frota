@@ -835,6 +835,15 @@ app.get('/api/documents/fluxograma-bloqueio-moto', protect, (req, res, next) => 
   });
 });
 
+app.get('/api/documents/knov-gravar-senha-cartao', protect, (req, res, next) => {
+  const filePath = path.join(serverDirectory, 'private', 'documents', 'knov-gravar-senha-cartao.pdf');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Disposition', 'inline; filename="Knov Gravar Senha Cartao.pdf"');
+  res.sendFile(filePath, (error) => {
+    if (error && !res.headersSent) next(error);
+  });
+});
+
 // --- ARTICLES ROUTES (COM CACHE EM MEMÓRIA) ---
 let articlesListCache = { data: null, expiresAt: 0 };
 const ARTICLES_TTL_MS = 3 * 60 * 1000; // 3 minutos de TTL

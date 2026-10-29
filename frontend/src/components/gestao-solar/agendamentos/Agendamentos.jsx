@@ -15,6 +15,7 @@ import {
   Download, 
   RefreshCw,
   Building2,
+  MapPin,
   Users,
   Wrench,
   X,
@@ -65,8 +66,9 @@ export default function Agendamentos() {
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [paginaAtual, setPaginaAtual] = useState(1);
 
-  // Unidades existentes exclusivamente na tabela de agendamentos
+  // Unidades e UFs existentes exclusivamente na tabela de agendamentos
   const [unidadesDisponiveis, setUnidadesDisponiveis] = useState([]);
+  const [ufsDisponiveis, setUfsDisponiveis] = useState([]);
 
   // KPIs
   const [kpis, setKpis] = useState({
@@ -80,8 +82,9 @@ export default function Agendamentos() {
   const [inputBusca, setInputBusca] = useState('');
   const [busca, setBusca] = useState('');
   const [filtroUnidade, setFiltroUnidade] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState('');
-  const [filtroServico, setFiltroServico] = useState('');
+  const [filtroUF, setFiltroUF] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState([]);
+  const [filtroServico, setFiltroServico] = useState([]);
   const [filtroTipoTecnico, setFiltroTipoTecnico] = useState('');
   const [filtroDataInicio, setFiltroDataInicio] = useState('');
   const [filtroDataFim, setFiltroDataFim] = useState('');
@@ -97,8 +100,9 @@ export default function Agendamentos() {
   const activeFiltersCount = [
     busca,
     filtroUnidade,
-    filtroStatus,
-    filtroServico,
+    filtroUF,
+    filtroStatus.length > 0,
+    filtroServico.length > 0,
     filtroTipoTecnico,
     filtroDataInicio,
     filtroDataFim
@@ -119,19 +123,21 @@ export default function Agendamentos() {
     setInputBusca('');
     setBusca('');
     setFiltroUnidade('');
-    setFiltroStatus('');
-    setFiltroServico('');
+    setFiltroUF('');
+    setFiltroStatus([]);
+    setFiltroServico([]);
     setFiltroTipoTecnico('');
     setFiltroDataInicio('');
     setFiltroDataFim('');
     setPaginaAtual(1);
   };
 
-  // Buscar Unidades que existem na tabela de agendamentos
+  // Buscar Unidades e UFs que existem na tabela de agendamentos
   const carregarUnidadesDisponiveis = async () => {
     try {
       const res = await api.get('/gestao-solar/agendamentos/unidades');
       setUnidadesDisponiveis(res.data?.data?.unidades || []);
+      setUfsDisponiveis(res.data?.data?.ufs || []);
     } catch (err) {
       console.error(err);
     }
@@ -156,8 +162,9 @@ export default function Agendamentos() {
         limit: ITENS_POR_PAGINA,
         busca: busca.trim() || undefined,
         unidade: filtroUnidade || undefined,
-        status: filtroStatus || undefined,
-        servico: filtroServico || undefined,
+        uf: filtroUF || undefined,
+        status: filtroStatus.length > 0 ? filtroStatus.join(',') : undefined,
+        servico: filtroServico.length > 0 ? filtroServico.join(',') : undefined,
         tipo_tecnico: filtroTipoTecnico || undefined,
         data_inicio: filtroDataInicio || undefined,
         data_fim: filtroDataFim || undefined
@@ -173,7 +180,7 @@ export default function Agendamentos() {
     } finally {
       setLoading(false);
     }
-  }, [paginaAtual, busca, filtroUnidade, filtroStatus, filtroServico, filtroTipoTecnico, filtroDataInicio, filtroDataFim]);
+  }, [paginaAtual, busca, filtroUnidade, filtroUF, filtroStatus, filtroServico, filtroTipoTecnico, filtroDataInicio, filtroDataFim]);
 
   useEffect(() => {
     carregarAgendamentos();
@@ -365,7 +372,7 @@ export default function Agendamentos() {
 
       {/* 3. DEPOIS: Os Filtros (Padronizados com a Estética Exata da Tela de Veículos) */}
       <div className="flex flex-col gap-2 w-full">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 bg-slate-50/40 p-2 lg:p-3 rounded-2xl border border-slate-200/50 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 bg-slate-50/40 p-2 lg:p-3 rounded-2xl border border-slate-200/50 w-full">
           
           {/* Filtro por UNIDADE (Apenas opções que existem na tabela de agendamentos) */}
           <SearchableSelect
@@ -380,6 +387,19 @@ export default function Agendamentos() {
             icon={Building2}
           />
 
+          {/* Filtro por UF (Seleção única igual ao filtro de Unidade) */}
+          <SearchableSelect
+            label="UF"
+            placeholder="UF..."
+            options={ufsDisponiveis}
+            value={filtroUF}
+            onChange={(val) => {
+              setFiltroUF(val);
+              setPaginaAtual(1);
+            }}
+            icon={MapPin}
+          />
+
           {/* Filtro por STATUS */}
           <SearchableSelect
             label="Status"
@@ -391,6 +411,7 @@ export default function Agendamentos() {
               setPaginaAtual(1);
             }}
             icon={Filter}
+            multiple
           />
 
           {/* Filtro por SERVIÇO */}
@@ -404,6 +425,7 @@ export default function Agendamentos() {
               setPaginaAtual(1);
             }}
             icon={Wrench}
+            multiple
           />
 
           {/* Filtro por TÉCNICO */}
@@ -495,6 +517,11 @@ export default function Agendamentos() {
               {filtroUnidade && (
                 <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-bold">
                   Unidade: {filtroUnidade}
+                </span>
+              )}
+              {filtroUF && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-bold">
+                  UF: {filtroUF}
                 </span>
               )}
             </span>
