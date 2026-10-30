@@ -155,7 +155,7 @@ export default function Agendamentos() {
     }
   }, []);
 
-  // Buscar KPIs
+  // Buscar KPIs (recalculados dinamicamente com base nos filtros ativos)
   const carregarKpis = useCallback(async () => {
     if (kpisAbortRef.current) {
       kpisAbortRef.current.abort();
@@ -164,14 +164,30 @@ export default function Agendamentos() {
     kpisAbortRef.current = controller;
 
     try {
-      const res = await api.get('/gestao-solar/agendamentos/kpis', { signal: controller.signal });
-      setKpis(res.data?.data || { total: 0, realizados: 0, pendentes: 0, frustrados: 0 });
+      const params = {
+        busca: busca.trim() || undefined,
+        unidade: filtroUnidade || undefined,
+        uf: filtroUF || undefined,
+        status: filtroStatus.length > 0 ? filtroStatus.join(',') : undefined,
+        servico: filtroServico.length > 0 ? filtroServico.join(',') : undefined,
+        tipo_tecnico: filtroTipoTecnico || undefined,
+        data_inicio: filtroDataInicio || undefined,
+        data_fim: filtroDataFim || undefined
+      };
+
+      const res = await api.get('/gestao-solar/agendamentos/kpis', {
+        params,
+        signal: controller.signal
+      });
+      if (res.data?.data) {
+        setKpis(res.data.data);
+      }
     } catch (err) {
       if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
         console.error(err);
       }
     }
-  }, []);
+  }, [busca, filtroUnidade, filtroUF, filtroStatus, filtroServico, filtroTipoTecnico, filtroDataInicio, filtroDataFim]);
 
   // Buscar Agendamentos
   const carregarAgendamentos = useCallback(async () => {
@@ -203,6 +219,9 @@ export default function Agendamentos() {
       setAgendamentos(res.data?.data?.agendamentos || []);
       setTotalRegistros(res.data?.data?.pagination?.total || 0);
       setTotalPaginas(res.data?.data?.pagination?.total_pages || 1);
+      if (res.data?.data?.kpis) {
+        setKpis(res.data.data.kpis);
+      }
     } catch (err) {
       if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
         console.error(err);
@@ -225,13 +244,12 @@ export default function Agendamentos() {
   }, [carregarAgendamentos]);
 
   useEffect(() => {
-    carregarKpis();
     carregarUnidadesDisponiveis();
     return () => {
       if (kpisAbortRef.current) kpisAbortRef.current.abort();
       if (unidadesAbortRef.current) unidadesAbortRef.current.abort();
     };
-  }, [carregarKpis, carregarUnidadesDisponiveis]);
+  }, [carregarUnidadesDisponiveis]);
 
   const indexPrimeiro = totalRegistros === 0 ? 0 : (paginaAtual - 1) * ITENS_POR_PAGINA + 1;
   const indexUltimo = Math.min(paginaAtual * ITENS_POR_PAGINA, totalRegistros);
@@ -493,7 +511,14 @@ export default function Agendamentos() {
               placeholder="Placa, responsável, O.S... (Enter para buscar)"
               className="w-full bg-white border border-slate-200 text-xs text-slate-800 font-bold rounded-xl pl-9 pr-24 py-2.5 lg:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
               value={inputBusca}
-              onChange={(event) => setInputBusca(event.target.value)}
+              onChange={(event) => {
+                const val = event.target.value;
+                setInputBusca(val);
+                if (!val.trim() && busca) {
+                  setBusca('');
+                  setPaginaAtual(1);
+                }
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();

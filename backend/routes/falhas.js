@@ -601,12 +601,21 @@ export default function createFalhasRouter(prisma, protect) {
           select: {
             id: true,
             placa: true,
+            unidade: true,
+            uf: true,
+            tipo_veiculo: true,
+            nome_responsavel: true,
+            contato_responsavel: true,
             data_agendamento: true,
             status: true,
             servico: true,
             tipo_tecnico: true,
+            tecnico_corpvs_id: true,
+            tecnico_terceirizado_id: true,
             nome_tecnico: true,
             numero_os: true,
+            motivo_frustrado: true,
+            observacoes: true,
             criado_em: true,
             atualizado_em: true
           },
@@ -665,16 +674,32 @@ export default function createFalhasRouter(prisma, protect) {
           situacao_agendamento: situacaoAgendamento,
           ultimo_agendamento: ultimoAg ? {
             id: ultimoAg.id,
+            placa: ultimoAg.placa,
+            unidade: ultimoAg.unidade || r.unidadeFinal,
+            uf: ultimoAg.uf || r.ufFinal,
+            tipo_veiculo: ultimoAg.tipo_veiculo || r.tipoBruto || r.categoriaVeiculo,
+            nome_responsavel: ultimoAg.nome_responsavel,
+            contato_responsavel: ultimoAg.contato_responsavel,
             status: ultimoAg.status,
             data_agendamento: ultimoAg.data_agendamento,
             servico: ultimoAg.servico,
             nome_tecnico: ultimoAg.nome_tecnico,
             tipo_tecnico: ultimoAg.tipo_tecnico,
+            tecnico_corpvs_id: ultimoAg.tecnico_corpvs_id,
+            tecnico_terceirizado_id: ultimoAg.tecnico_terceirizado_id,
             numero_os: ultimoAg.numero_os,
+            motivo_frustrado: ultimoAg.motivo_frustrado,
+            observacoes: ultimoAg.observacoes,
             criado_em: ultimoAg.criado_em
           } : null
         });
       }
+
+      placasDetalhe.sort((a, b) => {
+        const cmpUnidade = String(a.unidade || '').localeCompare(String(b.unidade || ''), 'pt-BR', { sensitivity: 'base' });
+        if (cmpUnidade !== 0) return cmpUnidade;
+        return String(a.placa || '').localeCompare(String(b.placa || ''), 'pt-BR', { sensitivity: 'base' });
+      });
 
       const pendentesAgendar = Math.max(0, falhasReaisCount - confirmadosAgendado);
       const pctAgendado = falhasReaisCount > 0

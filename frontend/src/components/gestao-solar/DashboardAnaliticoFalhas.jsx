@@ -32,6 +32,7 @@ import {
   Layers,
   XCircle,
   PlusCircle,
+  Edit3,
   Clock,
   Eye,
   EyeOff
@@ -263,6 +264,7 @@ export default function DashboardAnaliticoFalhas() {
   const [activeDonutIndex, setActiveDonutIndex] = useState(null);
   const [mostrarPlacasPendentes, setMostrarPlacasPendentes] = useState(false);
   const [agendamentoModalData, setAgendamentoModalData] = useState(null);
+  const [agendamentoParaEditar, setAgendamentoParaEditar] = useState(null);
   const [isAgendamentoModalOpen, setIsAgendamentoModalOpen] = useState(false);
 
   const ufDropdownRef = useRef(null);
@@ -365,13 +367,25 @@ export default function DashboardAnaliticoFalhas() {
       ? dadosRoscaAgendamento[activeDonutIndex]
       : null;
 
-  // Placas pendentes de estar com status "Agendado"
+  // Placas pendentes de estar com status "Agendado" (Ordenadas por Unidade de A-Z)
   const placasPendentesLista = useMemo(
-    () => (cobertura.placas_detalhe || []).filter((p) => p.situacao_agendamento !== 'AGENDADO'),
+    () =>
+      (cobertura.placas_detalhe || [])
+        .filter((p) => p.situacao_agendamento !== 'AGENDADO')
+        .sort((a, b) => {
+          const cmpUnidade = String(a.unidade || '').localeCompare(String(b.unidade || ''), 'pt-BR', {
+            sensitivity: 'base'
+          });
+          if (cmpUnidade !== 0) return cmpUnidade;
+          return String(a.placa || '').localeCompare(String(b.placa || ''), 'pt-BR', {
+            sensitivity: 'base'
+          });
+        }),
     [cobertura.placas_detalhe]
   );
 
   const handleAbrirNovoAgendamento = (item) => {
+    setAgendamentoParaEditar(null);
     setAgendamentoModalData({
       falha_id: item.id,
       placa: item.placa,
@@ -380,6 +394,19 @@ export default function DashboardAnaliticoFalhas() {
       tipo_veiculo: item.tipo_veiculo,
       numero_os: item.ordem_servico || '',
       servico: 'Manutenção'
+    });
+    setIsAgendamentoModalOpen(true);
+  };
+
+  const handleAbrirEditarAgendamento = (item) => {
+    if (!item?.ultimo_agendamento) return;
+    setAgendamentoModalData(null);
+    setAgendamentoParaEditar({
+      ...item.ultimo_agendamento,
+      placa: item.ultimo_agendamento.placa || item.placa,
+      unidade: item.ultimo_agendamento.unidade || item.unidade,
+      uf: item.ultimo_agendamento.uf || item.uf,
+      tipo_veiculo: item.ultimo_agendamento.tipo_veiculo || item.tipo_veiculo
     });
     setIsAgendamentoModalOpen(true);
   };
@@ -1023,13 +1050,23 @@ export default function DashboardAnaliticoFalhas() {
                       )}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleAbrirNovoAgendamento(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
-                      >
-                        <PlusCircle size={13} /> Agendar
-                      </button>
+                      {item.situacao_agendamento === 'SEM_REGISTRO' || !item.ultimo_agendamento ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirNovoAgendamento(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+                        >
+                          <PlusCircle size={13} /> Agendar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirEditarAgendamento(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
+                        >
+                          <Edit3 size={13} /> Editar
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1113,19 +1150,23 @@ export default function DashboardAnaliticoFalhas() {
         )}
       </div>
 
-      {/* Modal de Novo Agendamento acionado direto pela lista de Falhas Reais não agendadas */}
+      {/* Modal de Novo / Edição de Agendamento acionado direto pela lista de Falhas Reais pendentes */}
       {isAgendamentoModalOpen && (
         <Suspense fallback={null}>
           <ModalNovoAgendamento
+            key={agendamentoParaEditar?.id || agendamentoModalData?.placa || 'novo'}
             isOpen={isAgendamentoModalOpen}
             onClose={() => {
               setIsAgendamentoModalOpen(false);
               setAgendamentoModalData(null);
+              setAgendamentoParaEditar(null);
             }}
+            agendamentoParaEditar={agendamentoParaEditar}
             dadosIniciais={agendamentoModalData}
             onSuccess={() => {
               setIsAgendamentoModalOpen(false);
               setAgendamentoModalData(null);
+              setAgendamentoParaEditar(null);
               refetch();
             }}
           />

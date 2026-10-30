@@ -12,6 +12,150 @@ export const clearAgendamentosCache = () => {
   agendamentosUnidadesCache = { data: null, expiresAt: 0, inflight: null };
 };
 
+export function buildAgendamentosWhere(query = {}) {
+  const {
+    busca,
+    status,
+    servico,
+    tipo_tecnico,
+    unidade,
+    uf,
+    data_inicio,
+    data_fim
+  } = query;
+
+  const where = {};
+
+  if (status && (Array.isArray(status) || String(status).trim())) {
+    const statusList = (Array.isArray(status) ? status : String(status).split(','))
+      .map(s => s.trim())
+      .filter(s => Boolean(s) && s !== 'TODOS');
+    if (statusList.length === 1) {
+      where.status = statusList[0];
+    } else if (statusList.length > 1) {
+      where.status = { in: statusList };
+    }
+  }
+
+  if (servico && (Array.isArray(servico) || String(servico).trim())) {
+    const servicoList = (Array.isArray(servico) ? servico : String(servico).split(','))
+      .map(s => s.trim())
+      .filter(s => Boolean(s) && s !== 'TODOS');
+    if (servicoList.length === 1) {
+      where.servico = servicoList[0];
+    } else if (servicoList.length > 1) {
+      where.servico = { in: servicoList };
+    }
+  }
+
+  if (tipo_tecnico && String(tipo_tecnico).trim() && tipo_tecnico !== 'TODOS') {
+    where.tipo_tecnico = String(tipo_tecnico).trim().toUpperCase();
+  }
+
+  if (unidade && String(unidade).trim() && unidade !== 'TODAS') {
+    where.unidade = { equals: String(unidade).trim(), mode: 'insensitive' };
+  }
+
+  if (uf && String(uf).trim() && uf !== 'TODOS') {
+    where.uf = { equals: String(uf).trim().toUpperCase(), mode: 'insensitive' };
+  }
+
+  if (busca && String(busca).trim()) {
+    const termo = String(busca).trim();
+    const termoPlaca = termo.replace(/[^a-zA-Z0-9]/g, '');
+    where.OR = [
+      ...(termoPlaca ? [{ placa: { contains: termoPlaca, mode: 'insensitive' } }] : []),
+      { nome_responsavel: { contains: termo, mode: 'insensitive' } },
+      { contato_responsavel: { contains: termo, mode: 'insensitive' } },
+      { numero_os: { contains: termo, mode: 'insensitive' } },
+      { nome_tecnico: { contains: termo, mode: 'insensitive' } },
+      { unidade: { contains: termo, mode: 'insensitive' } }
+    ];
+  }
+
+  if (data_inicio || data_fim) {
+    where.data_agendamento = {};
+    if (data_inicio) {
+      const dIni = new Date(data_inicio);
+      if (!isNaN(dIni.getTime())) where.data_agendamento.gte = dIni;
+    }
+    if (data_fim) {
+      const dFim = new Date(data_fim);
+      if (!isNaN(dFim.getTime())) where.data_agendamento.lte = dFim;
+    }
+  }
+
+  return where;
+}
+
+export function hasActiveAgendamentosFilters(query = {}) {
+  const { busca, status, servico, tipo_tecnico, unidade, uf, data_inicio, data_fim } = query;
+  return Boolean(
+    (busca && String(busca).trim()) ||
+    (status && String(status).trim() && status !== 'TODOS') ||
+    (servico && String(servico).trim() && servico !== 'TODOS') ||
+    (tipo_tecnico && String(tipo_tecnico).trim() && tipo_tecnico !== 'TODOS') ||
+    (unidade && String(unidade).trim() && unidade !== 'TODAS') ||
+    (uf && String(uf).trim() && uf !== 'TODOS') ||
+    data_inicio ||
+    data_fim
+  );
+}
+
+export async function computeAgendamentosKpis(prisma, where = {}) {
+  let grouped = [];
+  if (typeof prisma.agendamentos.groupBy === 'function') {
+    grouped = await prisma.agendamentos.groupBy({
+      by: ['status'],
+      where,
+      _count: { _all: true }
+    });
+  } else if (typeof prisma.agendamentos.count === 'function') {
+    const [realizadosCount, agendadosCount, aguardandoDataCount, aguardandoTecnicoCount, frustradosCount] = await Promise.all([
+      prisma.agendamentos.count({ where: { ...where, status: 'Realizado' } }),
+      prisma.agendamentos.count({ where: { ...where, status: 'Agendado' } }),
+      prisma.agendamentos.count({ where: { ...where, status: 'Aguardando Data' } }),
+      prisma.agendamentos.count({ where: { ...where, status: 'Aguardando Técnico' } }),
+      prisma.agendamentos.count({ where: { ...where, status: 'Frustrado' } })
+    ]);
+    grouped = [
+      { status: 'Realizado', _count: { _all: realizadosCount } },
+      { status: 'Agendado', _count: { _all: agendadosCount } },
+      { status: 'Aguardando Data', _count: { _all: aguardandoDataCount } },
+      { status: 'Aguardando Técnico', _count: { _all: aguardandoTecnicoCount } },
+      { status: 'Frustrado', _count: { _all: frustradosCount } }
+    ];
+  }
+
+  const countByStatus = {};
+  let total = 0;
+  for (const item of grouped) {
+    countByStatus[item.status] = item._count._all;
+    total += item._count._all;
+  }
+
+  const realizados = countByStatus['Realizado'] || 0;
+  const agendados = countByStatus['Agendado'] || 0;
+  const aguardandoData = countByStatus['Aguardando Data'] || 0;
+  const aguardandoTecnico = countByStatus['Aguardando Técnico'] || 0;
+  const frustrados = countByStatus['Frustrado'] || 0;
+  const pendentes = agendados + aguardandoData + aguardandoTecnico;
+
+  return {
+    total,
+    realizados,
+    pendentes,
+    frustrados,
+    statusBreakdown: {
+      agendados,
+      aguardandoData,
+      aguardandoTecnico,
+      realizados,
+      frustrados
+    }
+  };
+}
+
 const VALID_SERVICES = ['Retirada', 'Manutenção', 'Instalação', 'Vistoria'];
 const VALID_STATUSES = ['Agendado', 'Aguardando Data', 'Aguardando Técnico', 'Realizado', 'Frustrado'];
 const VALID_TECH_TYPES = ['CORPVS', 'TERCEIRIZADO'];
@@ -145,78 +289,38 @@ export default function createAgendamentosRouter(prisma, protect) {
 
   router.get('/agendamentos/kpis', async (req, res, next) => {
     try {
-      const now = Date.now();
-      if (agendamentosKpisCache.data && agendamentosKpisCache.expiresAt > now) {
-        return res.status(200).json({ status: 'success', data: agendamentosKpisCache.data });
+      const hasFilters = hasActiveAgendamentosFilters(req.query);
+
+      // Sem filtros ativos: usa cache global em memória para resposta ultra-rápida
+      if (!hasFilters) {
+        const now = Date.now();
+        if (agendamentosKpisCache.data && agendamentosKpisCache.expiresAt > now) {
+          return res.status(200).json({ status: 'success', data: agendamentosKpisCache.data });
+        }
+
+        if (!agendamentosKpisCache.inflight) {
+          agendamentosKpisCache.inflight = (async () => {
+            const dataPayload = await computeAgendamentosKpis(prisma, {});
+            agendamentosKpisCache = {
+              data: dataPayload,
+              expiresAt: Date.now() + AGENDAMENTOS_CACHE_TTL_MS,
+              inflight: null
+            };
+            return dataPayload;
+          })().catch((err) => {
+            agendamentosKpisCache.inflight = null;
+            throw err;
+          });
+        }
+
+        const data = await agendamentosKpisCache.inflight;
+        return res.status(200).json({ status: 'success', data });
       }
 
-      if (!agendamentosKpisCache.inflight) {
-        agendamentosKpisCache.inflight = (async () => {
-          let grouped = [];
-          if (typeof prisma.agendamentos.groupBy === 'function') {
-            grouped = await prisma.agendamentos.groupBy({
-              by: ['status'],
-              _count: { _all: true }
-            });
-          } else if (typeof prisma.agendamentos.count === 'function') {
-            const [realizadosCount, agendadosCount, aguardandoDataCount, aguardandoTecnicoCount, frustradosCount] = await Promise.all([
-              prisma.agendamentos.count({ where: { status: 'Realizado' } }),
-              prisma.agendamentos.count({ where: { status: 'Agendado' } }),
-              prisma.agendamentos.count({ where: { status: 'Aguardando Data' } }),
-              prisma.agendamentos.count({ where: { status: 'Aguardando Técnico' } }),
-              prisma.agendamentos.count({ where: { status: 'Frustrado' } })
-            ]);
-            grouped = [
-              { status: 'Realizado', _count: { _all: realizadosCount } },
-              { status: 'Agendado', _count: { _all: agendadosCount } },
-              { status: 'Aguardando Data', _count: { _all: aguardandoDataCount } },
-              { status: 'Aguardando Técnico', _count: { _all: aguardandoTecnicoCount } },
-              { status: 'Frustrado', _count: { _all: frustradosCount } }
-            ];
-          }
-
-          const countByStatus = {};
-          let total = 0;
-          for (const item of grouped) {
-            countByStatus[item.status] = item._count._all;
-            total += item._count._all;
-          }
-
-          const realizados = countByStatus['Realizado'] || 0;
-          const agendados = countByStatus['Agendado'] || 0;
-          const aguardandoData = countByStatus['Aguardando Data'] || 0;
-          const aguardandoTecnico = countByStatus['Aguardando Técnico'] || 0;
-          const frustrados = countByStatus['Frustrado'] || 0;
-          const pendentes = agendados + aguardandoData + aguardandoTecnico;
-
-          const dataPayload = {
-            total,
-            realizados,
-            pendentes,
-            frustrados,
-            statusBreakdown: {
-              agendados,
-              aguardandoData,
-              aguardandoTecnico,
-              realizados,
-              frustrados
-            }
-          };
-
-          agendamentosKpisCache = {
-            data: dataPayload,
-            expiresAt: Date.now() + AGENDAMENTOS_CACHE_TTL_MS,
-            inflight: null
-          };
-          return dataPayload;
-        })().catch((err) => {
-          agendamentosKpisCache.inflight = null;
-          throw err;
-        });
-      }
-
-      const data = await agendamentosKpisCache.inflight;
-      res.status(200).json({ status: 'success', data });
+      // Com filtros ativos: recalcula os KPIs dinamicamente com base no 'where' da filtragem
+      const where = buildAgendamentosWhere(req.query);
+      const dataPayload = await computeAgendamentosKpis(prisma, where);
+      res.status(200).json({ status: 'success', data: dataPayload });
     } catch (error) {
       next(error);
     }
@@ -280,79 +384,8 @@ export default function createAgendamentosRouter(prisma, protect) {
 
   router.get('/agendamentos', async (req, res, next) => {
     try {
-      const {
-        busca,
-        status,
-        servico,
-        tipo_tecnico,
-        unidade,
-        uf,
-        data_inicio,
-        data_fim,
-        page,
-        limit
-      } = req.query;
-
-      const where = {};
-
-      if (status && (Array.isArray(status) || String(status).trim())) {
-        const statusList = (Array.isArray(status) ? status : String(status).split(','))
-          .map(s => s.trim())
-          .filter(Boolean);
-        if (statusList.length === 1) {
-          where.status = statusList[0];
-        } else if (statusList.length > 1) {
-          where.status = { in: statusList };
-        }
-      }
-
-      if (servico && (Array.isArray(servico) || String(servico).trim())) {
-        const servicoList = (Array.isArray(servico) ? servico : String(servico).split(','))
-          .map(s => s.trim())
-          .filter(Boolean);
-        if (servicoList.length === 1) {
-          where.servico = servicoList[0];
-        } else if (servicoList.length > 1) {
-          where.servico = { in: servicoList };
-        }
-      }
-
-      if (tipo_tecnico && tipo_tecnico.trim()) {
-        where.tipo_tecnico = tipo_tecnico.trim().toUpperCase();
-      }
-
-      if (unidade && unidade.trim()) {
-        where.unidade = { equals: unidade.trim(), mode: 'insensitive' };
-      }
-
-      if (uf && String(uf).trim()) {
-        where.uf = { equals: String(uf).trim().toUpperCase(), mode: 'insensitive' };
-      }
-
-      if (busca && busca.trim()) {
-        const termo = busca.trim();
-        const termoPlaca = termo.replace(/[^a-zA-Z0-9]/g, '');
-        where.OR = [
-          ...(termoPlaca ? [{ placa: { contains: termoPlaca, mode: 'insensitive' } }] : []),
-          { nome_responsavel: { contains: termo, mode: 'insensitive' } },
-          { contato_responsavel: { contains: termo, mode: 'insensitive' } },
-          { numero_os: { contains: termo, mode: 'insensitive' } },
-          { nome_tecnico: { contains: termo, mode: 'insensitive' } },
-          { unidade: { contains: termo, mode: 'insensitive' } }
-        ];
-      }
-
-      if (data_inicio || data_fim) {
-        where.data_agendamento = {};
-        if (data_inicio) {
-          const dIni = new Date(data_inicio);
-          if (!isNaN(dIni.getTime())) where.data_agendamento.gte = dIni;
-        }
-        if (data_fim) {
-          const dFim = new Date(data_fim);
-          if (!isNaN(dFim.getTime())) where.data_agendamento.lte = dFim;
-        }
-      }
+      const { page, limit } = req.query;
+      const where = buildAgendamentosWhere(req.query);
 
       const p = Math.max(1, parseInt(page, 10) || 1);
       const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
@@ -360,6 +393,7 @@ export default function createAgendamentosRouter(prisma, protect) {
 
       // Execução sequencial para poupar conexões concorrentes no pool do Supabase (PgBouncer)
       const total = await prisma.agendamentos.count({ where });
+      const kpis = await computeAgendamentosKpis(prisma, where);
       const itens = await prisma.agendamentos.findMany({
         where,
         include: {
@@ -380,6 +414,7 @@ export default function createAgendamentosRouter(prisma, protect) {
         status: 'success',
         data: {
           agendamentos: itens,
+          kpis,
           pagination: {
             total,
             page: p,
