@@ -1,6 +1,16 @@
 import express from 'express';
 import { z } from 'zod';
 import { restrictToGestaoSolar } from '../middleware/auth.js';
+import { clearLoteStaticCache } from './falhas.js';
+
+const AGENDAMENTOS_CACHE_TTL_MS = 5 * 60 * 1000;
+let agendamentosKpisCache = { data: null, expiresAt: 0, inflight: null };
+let agendamentosUnidadesCache = { data: null, expiresAt: 0, inflight: null };
+
+export const clearAgendamentosCache = () => {
+  agendamentosKpisCache = { data: null, expiresAt: 0, inflight: null };
+  agendamentosUnidadesCache = { data: null, expiresAt: 0, inflight: null };
+};
 
 const VALID_SERVICES = ['Retirada', 'Manutenção', 'Instalação', 'Vistoria'];
 const VALID_STATUSES = ['Agendado', 'Aguardando Data', 'Aguardando Técnico', 'Realizado', 'Frustrado'];
@@ -48,9 +58,22 @@ const tecnicoCorpvsSchema = z.object({
 
 export default function createAgendamentosRouter(prisma, protect) {
   const router = express.Router();
+  clearAgendamentosCache();
 
   // Exige autenticação e permissão de Gestão Solar em todas as rotas de agendamento
   router.use(protect, restrictToGestaoSolar);
+
+  // Invalidação automática de cache em mutações (POST, PUT, PATCH, DELETE)
+  router.use((req, res, next) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      res.on('finish', () => {
+        if (res.statusCode >= 200 && res.statusCode < 400) {
+          clearAgendamentosCache();
+        }
+      });
+    }
+    next();
+  });
 
   // =========================================================================
   // 1. TÉCNICOS CORPVS (CRUD)
@@ -122,60 +145,78 @@ export default function createAgendamentosRouter(prisma, protect) {
 
   router.get('/agendamentos/kpis', async (req, res, next) => {
     try {
-      let grouped = [];
-      if (typeof prisma.agendamentos.groupBy === 'function') {
-        grouped = await prisma.agendamentos.groupBy({
-          by: ['status'],
-          _count: { _all: true }
-        });
-      } else if (typeof prisma.agendamentos.count === 'function') {
-        const [totalCount, realizadosCount, agendadosCount, aguardandoDataCount, aguardandoTecnicoCount, frustradosCount] = await Promise.all([
-          prisma.agendamentos.count(),
-          prisma.agendamentos.count({ where: { status: 'Realizado' } }),
-          prisma.agendamentos.count({ where: { status: 'Agendado' } }),
-          prisma.agendamentos.count({ where: { status: 'Aguardando Data' } }),
-          prisma.agendamentos.count({ where: { status: 'Aguardando Técnico' } }),
-          prisma.agendamentos.count({ where: { status: 'Frustrado' } })
-        ]);
-        grouped = [
-          { status: 'Realizado', _count: { _all: realizadosCount } },
-          { status: 'Agendado', _count: { _all: agendadosCount } },
-          { status: 'Aguardando Data', _count: { _all: aguardandoDataCount } },
-          { status: 'Aguardando Técnico', _count: { _all: aguardandoTecnicoCount } },
-          { status: 'Frustrado', _count: { _all: frustradosCount } }
-        ];
+      const now = Date.now();
+      if (agendamentosKpisCache.data && agendamentosKpisCache.expiresAt > now) {
+        return res.status(200).json({ status: 'success', data: agendamentosKpisCache.data });
       }
 
-      const countByStatus = {};
-      let total = 0;
-      for (const item of grouped) {
-        countByStatus[item.status] = item._count._all;
-        total += item._count._all;
-      }
-
-      const realizados = countByStatus['Realizado'] || 0;
-      const agendados = countByStatus['Agendado'] || 0;
-      const aguardandoData = countByStatus['Aguardando Data'] || 0;
-      const aguardandoTecnico = countByStatus['Aguardando Técnico'] || 0;
-      const frustrados = countByStatus['Frustrado'] || 0;
-      const pendentes = agendados + aguardandoData + aguardandoTecnico;
-
-      res.status(200).json({
-        status: 'success',
-        data: {
-          total,
-          realizados,
-          pendentes,
-          frustrados,
-          statusBreakdown: {
-            agendados,
-            aguardandoData,
-            aguardandoTecnico,
-            realizados,
-            frustrados
+      if (!agendamentosKpisCache.inflight) {
+        agendamentosKpisCache.inflight = (async () => {
+          let grouped = [];
+          if (typeof prisma.agendamentos.groupBy === 'function') {
+            grouped = await prisma.agendamentos.groupBy({
+              by: ['status'],
+              _count: { _all: true }
+            });
+          } else if (typeof prisma.agendamentos.count === 'function') {
+            const [realizadosCount, agendadosCount, aguardandoDataCount, aguardandoTecnicoCount, frustradosCount] = await Promise.all([
+              prisma.agendamentos.count({ where: { status: 'Realizado' } }),
+              prisma.agendamentos.count({ where: { status: 'Agendado' } }),
+              prisma.agendamentos.count({ where: { status: 'Aguardando Data' } }),
+              prisma.agendamentos.count({ where: { status: 'Aguardando Técnico' } }),
+              prisma.agendamentos.count({ where: { status: 'Frustrado' } })
+            ]);
+            grouped = [
+              { status: 'Realizado', _count: { _all: realizadosCount } },
+              { status: 'Agendado', _count: { _all: agendadosCount } },
+              { status: 'Aguardando Data', _count: { _all: aguardandoDataCount } },
+              { status: 'Aguardando Técnico', _count: { _all: aguardandoTecnicoCount } },
+              { status: 'Frustrado', _count: { _all: frustradosCount } }
+            ];
           }
-        }
-      });
+
+          const countByStatus = {};
+          let total = 0;
+          for (const item of grouped) {
+            countByStatus[item.status] = item._count._all;
+            total += item._count._all;
+          }
+
+          const realizados = countByStatus['Realizado'] || 0;
+          const agendados = countByStatus['Agendado'] || 0;
+          const aguardandoData = countByStatus['Aguardando Data'] || 0;
+          const aguardandoTecnico = countByStatus['Aguardando Técnico'] || 0;
+          const frustrados = countByStatus['Frustrado'] || 0;
+          const pendentes = agendados + aguardandoData + aguardandoTecnico;
+
+          const dataPayload = {
+            total,
+            realizados,
+            pendentes,
+            frustrados,
+            statusBreakdown: {
+              agendados,
+              aguardandoData,
+              aguardandoTecnico,
+              realizados,
+              frustrados
+            }
+          };
+
+          agendamentosKpisCache = {
+            data: dataPayload,
+            expiresAt: Date.now() + AGENDAMENTOS_CACHE_TTL_MS,
+            inflight: null
+          };
+          return dataPayload;
+        })().catch((err) => {
+          agendamentosKpisCache.inflight = null;
+          throw err;
+        });
+      }
+
+      const data = await agendamentosKpisCache.inflight;
+      res.status(200).json({ status: 'success', data });
     } catch (error) {
       next(error);
     }
@@ -184,31 +225,50 @@ export default function createAgendamentosRouter(prisma, protect) {
   // Listar unidades distintas existentes na tabela de agendamentos
   router.get('/agendamentos/unidades', async (req, res, next) => {
     try {
-      const registros = await prisma.agendamentos.findMany({
-        where: {
-          OR: [{ unidade: { not: null } }, { uf: { not: null } }]
-        },
-        select: { unidade: true, uf: true },
-        distinct: ['unidade', 'uf'],
-        orderBy: { unidade: 'asc' }
-      });
+      const now = Date.now();
+      if (agendamentosUnidadesCache.data && agendamentosUnidadesCache.expiresAt > now) {
+        return res.status(200).json({ status: 'success', data: agendamentosUnidadesCache.data });
+      }
 
-      const lista = registros
-        .map(r => r.unidade?.trim())
-        .filter(Boolean)
-        .filter((val, idx, self) => self.indexOf(val) === idx);
+      if (!agendamentosUnidadesCache.inflight) {
+        agendamentosUnidadesCache.inflight = (async () => {
+          const registros = await prisma.agendamentos.findMany({
+            where: {
+              OR: [{ unidade: { not: null } }, { uf: { not: null } }]
+            },
+            select: { unidade: true, uf: true },
+            distinct: ['unidade', 'uf'],
+            orderBy: { unidade: 'asc' }
+          });
 
-      res.status(200).json({
-        status: 'success',
-        data: {
-          unidades: lista,
-          ufs: registros
-            .map(r => r.uf?.trim().toUpperCase())
+          const lista = registros
+            .map(r => r.unidade?.trim())
             .filter(Boolean)
-            .filter((val, idx, self) => self.indexOf(val) === idx)
-            .sort((a, b) => a.localeCompare(b, 'pt-BR'))
-        }
-      });
+            .filter((val, idx, self) => self.indexOf(val) === idx);
+
+          const dataPayload = {
+            unidades: lista,
+            ufs: registros
+              .map(r => r.uf?.trim().toUpperCase())
+              .filter(Boolean)
+              .filter((val, idx, self) => self.indexOf(val) === idx)
+              .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+          };
+
+          agendamentosUnidadesCache = {
+            data: dataPayload,
+            expiresAt: Date.now() + AGENDAMENTOS_CACHE_TTL_MS,
+            inflight: null
+          };
+          return dataPayload;
+        })().catch((err) => {
+          agendamentosUnidadesCache.inflight = null;
+          throw err;
+        });
+      }
+
+      const data = await agendamentosUnidadesCache.inflight;
+      res.status(200).json({ status: 'success', data });
     } catch (error) {
       next(error);
     }
@@ -433,6 +493,7 @@ export default function createAgendamentosRouter(prisma, protect) {
               ...(input.numero_os ? { ordem_servico: input.numero_os } : {})
             }
           });
+          clearLoteStaticCache();
         } else if (input.placa) {
           await prisma.falhas_registros.updateMany({
             where: {
@@ -444,6 +505,7 @@ export default function createAgendamentosRouter(prisma, protect) {
               ...(input.numero_os ? { ordem_servico: input.numero_os } : {})
             }
           });
+          clearLoteStaticCache();
         }
       } catch (falhaSyncErr) {
         console.warn('[SYNC_FALHA_WARN] Não foi possível sincronizar falha:', falhaSyncErr.message);

@@ -183,9 +183,12 @@ const getOrComputeLoteStaticMeta = async (prisma, loteId) => {
     where: { lote_id: loteId },
     select: {
       id: true,
+      placa: true,
       uf: true,
       unidade: true,
       tipo_veiculo: true,
+      tipo_falha: true,
+      status_tratativa: true,
       nivel_bateria: true
     }
   });
@@ -194,14 +197,31 @@ const getOrComputeLoteStaticMeta = async (prisma, loteId) => {
   const unidadesSet = new Set();
   const tiposSet = new Set();
   const idsBateriaBaixa = [];
+  const registrosIndex = [];
 
   for (const reg of registros) {
-    if (reg.uf) ufsSet.add(reg.uf.trim().toUpperCase());
-    if (reg.unidade) unidadesSet.add(reg.unidade.trim());
-    if (reg.tipo_veiculo) tiposSet.add(reg.tipo_veiculo.trim());
-    if (isBateriaBaixa(reg.nivel_bateria)) {
+    const ufNorm = reg.uf ? reg.uf.trim().toUpperCase() : '';
+    const unidadeNorm = reg.unidade ? reg.unidade.trim() : '';
+    const tipoVeiculoNorm = reg.tipo_veiculo ? reg.tipo_veiculo.trim() : '';
+    const batBaixa = isBateriaBaixa(reg.nivel_bateria);
+
+    if (ufNorm) ufsSet.add(ufNorm);
+    if (unidadeNorm) unidadesSet.add(unidadeNorm);
+    if (tipoVeiculoNorm) tiposSet.add(tipoVeiculoNorm);
+    if (batBaixa) {
       idsBateriaBaixa.push(reg.id);
     }
+
+    registrosIndex.push({
+      id: reg.id,
+      placaNorm: normalizePlate(reg.placa),
+      uf: ufNorm,
+      unidade: unidadeNorm,
+      tipoVeiculoLower: tipoVeiculoNorm.toLowerCase(),
+      tipoFalha: reg.tipo_falha ? String(reg.tipo_falha).trim().toUpperCase() : '',
+      statusTratativa: reg.status_tratativa ? String(reg.status_tratativa).trim() : '',
+      bateriaBaixa: batBaixa
+    });
   }
 
   const meta = {
@@ -211,7 +231,8 @@ const getOrComputeLoteStaticMeta = async (prisma, loteId) => {
       tipos_veiculo: Array.from(tiposSet).sort()
     },
     idsBateriaBaixa,
-    totalBateriaBaixa: idsBateriaBaixa.length
+    totalBateriaBaixa: idsBateriaBaixa.length,
+    registrosIndex
   };
 
   loteStaticCache.set(loteId, meta);
@@ -220,6 +241,7 @@ const getOrComputeLoteStaticMeta = async (prisma, loteId) => {
 
 export default function createFalhasRouter(prisma, protect) {
   const router = express.Router();
+  clearLoteStaticCache();
 
   // Exige autenticação e permissão de Gestão Solar em todas as rotas de falhas
   router.use(protect, restrictToGestaoSolar);
@@ -410,8 +432,16 @@ export default function createFalhasRouter(prisma, protect) {
         where.tipo_veiculo = { equals: String(tipo_veiculo).trim(), mode: 'insensitive' };
       }
 
-      if (status && status !== 'TODOS') {
-        where.status_tratativa = String(status).trim();
+      let statusList = [];
+      if (status && (Array.isArray(status) || String(status).trim())) {
+        statusList = (Array.isArray(status) ? status : String(status).split(','))
+          .map(s => String(s).trim())
+          .filter(s => s && s !== 'TODOS');
+        if (statusList.length === 1) {
+          where.status_tratativa = statusList[0];
+        } else if (statusList.length > 1) {
+          where.status_tratativa = { in: statusList };
+        }
       }
 
       if (tipo_falha && tipo_falha !== 'TODOS') {
@@ -423,9 +453,20 @@ export default function createFalhasRouter(prisma, protect) {
         where.placa = { contains: termoLimpo, mode: 'insensitive' };
       }
 
-      if (bateria_baixa === 'true' || bateria_baixa === '1' || bateria_baixa === true) {
+      const isBateriaBaixaFilterActive = bateria_baixa === 'true' || bateria_baixa === '1' || bateria_baixa === true;
+      if (isBateriaBaixaFilterActive) {
         where.id = { in: loteMeta.idsBateriaBaixa };
       }
+
+      const hasActiveFilters = Boolean(
+        where.uf ||
+        where.unidade ||
+        where.tipo_veiculo ||
+        where.status_tratativa ||
+        where.tipo_falha ||
+        where.placa ||
+        isBateriaBaixaFilterActive
+      );
 
       // 4. Paginação
       const numPage = Math.max(1, parseInt(page, 10) || 1);
@@ -442,20 +483,62 @@ export default function createFalhasRouter(prisma, protect) {
       else if (sort_by === 'status_tratativa') orderBy = { status_tratativa: dir };
       else orderBy = { unidade: dir };
 
-      // 6. Consultas paralelas ultra-leves: registros paginados, total filtrado, seletor de lotes e contagem de pendentes
-      const [registros, totalFiltrado, lotesDisponiveis, countPendentes] = await Promise.all([
+      // 6. Cálculo em memória ultra-rápido (< 0.2ms) para paginação e KPIs dinâmicos
+      // Usa o índice leve já em cache no loteMeta para poupar conexões do pool Supabase (PgBouncer)
+      const ufFilter = where.uf || null;
+      const unidadeFilter = where.unidade || null;
+      const tipoVeiculoFilterLower = tipo_veiculo && tipo_veiculo !== 'TODOS'
+        ? String(tipo_veiculo).trim().toLowerCase()
+        : null;
+      const statusSet = statusList.length > 0 ? new Set(statusList) : null;
+      const tipoFalhaFilter = where.tipo_falha || null;
+      const termoPlacaFilter = busca && String(busca).trim().length > 0
+        ? normalizePlate(busca)
+        : null;
+
+      let totalFiltrado = 0;
+      let kpiNovas = 0;
+      let kpiRecorrentes = 0;
+      let kpiPendentes = 0;
+      let kpiBateriaBaixa = 0;
+
+      for (const item of loteMeta.registrosIndex) {
+        if (ufFilter && item.uf !== ufFilter) continue;
+        if (unidadeFilter && item.unidade !== unidadeFilter) continue;
+        if (tipoVeiculoFilterLower && item.tipoVeiculoLower !== tipoVeiculoFilterLower) continue;
+        if (statusSet && !statusSet.has(item.statusTratativa)) continue;
+        if (tipoFalhaFilter && item.tipoFalha !== tipoFalhaFilter) continue;
+        if (termoPlacaFilter && !item.placaNorm.includes(termoPlacaFilter)) continue;
+        if (isBateriaBaixaFilterActive && !item.bateriaBaixa) continue;
+
+        totalFiltrado++;
+        if (item.tipoFalha === 'NOVA FALHA') kpiNovas++;
+        else if (item.tipoFalha === 'FALHA RECORRENTE') kpiRecorrentes++;
+        if (item.statusTratativa === 'Pendente de Contato') kpiPendentes++;
+        if (item.bateriaBaixa) kpiBateriaBaixa++;
+      }
+
+      const [registros, lotesDisponiveis] = await Promise.all([
         prisma.falhas_registros.findMany({
           where,
           skip,
           take: numLimit,
           orderBy
         }),
-        prisma.falhas_registros.count({ where }),
-        getCachedLotesDisponiveis(prisma),
-        prisma.falhas_registros.count({
-          where: { lote_id: loteAtivo.id, status_tratativa: 'Pendente de Contato' }
-        })
+        getCachedLotesDisponiveis(prisma)
       ]);
+
+      const kpiTotal = !hasActiveFilters && loteAtivo.total_veiculos !== undefined && loteAtivo.total_veiculos !== null
+        ? loteAtivo.total_veiculos
+        : totalFiltrado;
+      if (!hasActiveFilters) {
+        if (loteAtivo.novas_falhas !== undefined && loteAtivo.novas_falhas !== null) {
+          kpiNovas = loteAtivo.novas_falhas;
+        }
+        if (loteAtivo.recorrentes !== undefined && loteAtivo.recorrentes !== null) {
+          kpiRecorrentes = loteAtivo.recorrentes;
+        }
+      }
 
       // 7. Cruzamento inteligente de agendamentos para as placas da página atual
       const mapaPlacasBusca = new Set();
@@ -530,9 +613,6 @@ export default function createFalhasRouter(prisma, protect) {
       });
 
       const totalPages = Math.ceil(totalFiltrado / numLimit) || 1;
-      const totalVeiculosLote = loteAtivo.total_veiculos !== undefined && loteAtivo.total_veiculos !== null
-        ? loteAtivo.total_veiculos
-        : totalFiltrado;
 
       res.status(200).json({
         status: 'success',
@@ -541,11 +621,11 @@ export default function createFalhasRouter(prisma, protect) {
           lotes: lotesDisponiveis,
           registros: registrosComAgendamento,
           kpis: {
-            total: totalVeiculosLote,
-            novas_falhas: loteAtivo.novas_falhas ?? 0,
-            recorrentes: loteAtivo.recorrentes ?? 0,
-            pendentes: countPendentes,
-            bateria_baixa: loteMeta.totalBateriaBaixa
+            total: kpiTotal,
+            novas_falhas: kpiNovas,
+            recorrentes: kpiRecorrentes,
+            pendentes: kpiPendentes,
+            bateria_baixa: kpiBateriaBaixa
           },
           pagination: {
             total: totalFiltrado,
@@ -819,6 +899,7 @@ export default function createFalhasRouter(prisma, protect) {
           ...(input.observacao !== undefined && { observacao: input.observacao })
         }
       });
+      clearLoteStaticCache(registro?.lote_id);
 
       res.status(200).json({
         status: 'success',
@@ -905,6 +986,7 @@ export default function createFalhasRouter(prisma, protect) {
         where: { id: { in: input.ids } },
         data: updateData
       });
+      clearLoteStaticCache();
 
       recordAuditEvent({
         action: 'ATUALIZAR_TRATATIVA_MASSA',
@@ -965,6 +1047,7 @@ export default function createFalhasRouter(prisma, protect) {
           usuario_contato: nomeUsuario
         }
       });
+      clearLoteStaticCache(input.lote_id);
 
       recordAuditEvent({
         action: 'REGISTRAR_CONTATO_UNIDADE',
@@ -1027,6 +1110,7 @@ export default function createFalhasRouter(prisma, protect) {
           usuario_contato: nomeUsuario
         }
       });
+      clearLoteStaticCache(input.lote_id);
 
       recordAuditEvent({
         action: 'REGISTRAR_CONTATO_MULTI_UNIDADE',

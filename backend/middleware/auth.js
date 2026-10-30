@@ -17,9 +17,10 @@ export const readRequestToken = (req) => {
   return null;
 };
 
-const CACHE_TTL_MS = 30 * 1000;
+const CACHE_TTL_MS = 2 * 60 * 1000;
 const MAX_CACHE_SIZE = 1000;
 const sessionCache = new Map();
+const inflightSessionLookups = new Map();
 
 // Limpeza periódica de sessões expiradas (desbloqueada via unref para não travar o processo)
 const cacheCleanupTimer = setInterval(() => {
@@ -37,8 +38,14 @@ if (cacheCleanupTimer.unref) {
 export const invalidateSessionCache = (userId) => {
   if (userId) {
     sessionCache.delete(userId);
+    for (const key of inflightSessionLookups.keys()) {
+      if (key.startsWith(`${userId}:`)) {
+        inflightSessionLookups.delete(key);
+      }
+    }
   } else {
     sessionCache.clear();
+    inflightSessionLookups.clear();
   }
 };
 
@@ -61,32 +68,47 @@ export const authenticateToken = async (prisma, token) => {
   if (cached && cached.expiresAt > now && cached.user.sessionVersion === decoded.sessionVersion) {
     user = cached.user;
   } else {
-    user = await prisma.user.findUnique({
-      where: { id: decoded.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        can_access_gestao_solar: true,
-        sessionVersion: true
-      }
-    });
+    const inflightKey = `${decoded.sub}:${decoded.sessionVersion}`;
+    let lookupPromise = inflightSessionLookups.get(inflightKey);
 
-    if (!user || user.sessionVersion !== decoded.sessionVersion) {
-      sessionCache.delete(decoded.sub);
-      throw new Error('Sessão revogada.');
+    if (!lookupPromise) {
+      lookupPromise = (async () => {
+        const fetchedUser = await prisma.user.findUnique({
+          where: { id: decoded.sub },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            can_access_gestao_solar: true,
+            sessionVersion: true
+          }
+        });
+
+        if (!fetchedUser || fetchedUser.sessionVersion !== decoded.sessionVersion) {
+          sessionCache.delete(decoded.sub);
+          throw new Error('Sessão revogada.');
+        }
+
+        if (sessionCache.size >= MAX_CACHE_SIZE) {
+          const oldestKey = sessionCache.keys().next().value;
+          if (oldestKey) sessionCache.delete(oldestKey);
+        }
+
+        sessionCache.set(decoded.sub, {
+          user: fetchedUser,
+          expiresAt: Date.now() + CACHE_TTL_MS
+        });
+
+        return fetchedUser;
+      })().finally(() => {
+        inflightSessionLookups.delete(inflightKey);
+      });
+
+      inflightSessionLookups.set(inflightKey, lookupPromise);
     }
 
-    if (sessionCache.size >= MAX_CACHE_SIZE) {
-      const oldestKey = sessionCache.keys().next().value;
-      if (oldestKey) sessionCache.delete(oldestKey);
-    }
-
-    sessionCache.set(decoded.sub, {
-      user,
-      expiresAt: now + CACHE_TTL_MS
-    });
+    user = await lookupPromise;
   }
 
   return {

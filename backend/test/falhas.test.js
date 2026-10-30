@@ -564,3 +564,67 @@ test('Falhas Agendamentos - Cruzamento inteligente retorna agendamento ativo com
   assert.equal(regXYZ.agendamento.status, 'Aguardando Data');
 });
 
+test('Falhas Filtros & KPIs Dinâmicos - Filtra múltiplos status Tratativa e recalcula todos os KPIs por unidade/status', async () => {
+  const registrosBase = [
+    { id: 't1', placa: 'TER0001', uf: 'PI', unidade: 'Teresina', tipo_veiculo: 'CAMINHAO', tipo_falha: 'NOVA FALHA', status_tratativa: 'Pendente de Contato', nivel_bateria: '9.8V' },
+    { id: 't2', placa: 'TER0002', uf: 'PI', unidade: 'Teresina', tipo_veiculo: 'MOTO', tipo_falha: 'FALHA RECORRENTE', status_tratativa: 'Oficina', nivel_bateria: '12.4V' },
+    { id: 't3', placa: 'TER0003', uf: 'PI', unidade: 'Teresina', tipo_veiculo: 'CAMINHAO', tipo_falha: 'FALHA RECORRENTE', status_tratativa: 'Parado', nivel_bateria: '10.2V' },
+    { id: 'f1', placa: 'FOR0001', uf: 'CE', unidade: 'Fortaleza', tipo_veiculo: 'CAMINHAO', tipo_falha: 'NOVA FALHA', status_tratativa: 'Pendente de Contato', nivel_bateria: '8.5V' }
+  ];
+
+  const matchesWhere = (reg, where = {}) => {
+    if (where.unidade && reg.unidade !== where.unidade) return false;
+    if (where.uf && reg.uf !== where.uf) return false;
+    if (where.tipo_falha && reg.tipo_falha !== where.tipo_falha) return false;
+    if (where.status_tratativa) {
+      if (typeof where.status_tratativa === 'string' && reg.status_tratativa !== where.status_tratativa) return false;
+      if (where.status_tratativa.in && !where.status_tratativa.in.includes(reg.status_tratativa)) return false;
+    }
+    if (where.id?.in && !where.id.in.includes(reg.id)) return false;
+    return true;
+  };
+
+  const prisma = {
+    falhas_lotes: {
+      findFirst: async () => ({ id: 'lote-kpis-dinamicos', data_extracao: new Date('2026-10-30'), total_veiculos: 4, novas_falhas: 2, recorrentes: 2 }),
+      findUnique: async () => ({ id: 'lote-kpis-dinamicos', data_extracao: new Date('2026-10-30'), total_veiculos: 4, novas_falhas: 2, recorrentes: 2 }),
+      findMany: async () => [{ id: 'lote-kpis-dinamicos', data_extracao: new Date('2026-10-30'), total_veiculos: 4, novas_falhas: 2, recorrentes: 2 }]
+    },
+    falhas_registros: {
+      findMany: async ({ where }) => registrosBase.filter(r => matchesWhere(r, where)),
+      count: async ({ where }) => registrosBase.filter(r => matchesWhere(r, where)).length
+    }
+  };
+
+  const app = createMockApp(prisma, mockUserSolar);
+
+  // 1. Filtrar apenas unidade Teresina: deve atualizar todos os 5 KPIs exclusivamente para Teresina
+  const resTeresina = await makeRequest(app, 'GET', '/api/gestao-solar/falhas?lote_id=lote-kpis-dinamicos&unidade=Teresina');
+  assert.equal(resTeresina.status, 200);
+  assert.equal(resTeresina.data.data.registros.length, 3);
+  assert.deepEqual(resTeresina.data.data.kpis, {
+    total: 3,
+    novas_falhas: 1,
+    recorrentes: 2,
+    pendentes: 1,
+    bateria_baixa: 2 // t1 (9.8V) e t3 (10.2V)
+  });
+
+  // 2. Filtrar múltiplos status (Oficina,Parado) em Teresina: pendentes deve ser 0 pois não está no filtro
+  const resMultiStatus = await makeRequest(
+    app,
+    'GET',
+    '/api/gestao-solar/falhas?lote_id=lote-kpis-dinamicos&unidade=Teresina&status=Oficina,Parado'
+  );
+  assert.equal(resMultiStatus.status, 200);
+  assert.equal(resMultiStatus.data.data.registros.length, 2);
+  assert.deepEqual(resMultiStatus.data.data.kpis, {
+    total: 2,
+    novas_falhas: 0,
+    recorrentes: 2,
+    pendentes: 0,
+    bateria_baixa: 1 // apenas t3 (10.2V)
+  });
+});
+
+

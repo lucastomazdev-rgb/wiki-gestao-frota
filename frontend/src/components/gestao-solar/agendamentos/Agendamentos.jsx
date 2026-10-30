@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Calendar, 
   Plus, 
@@ -132,29 +132,55 @@ export default function Agendamentos() {
     setPaginaAtual(1);
   };
 
+  const agendamentosAbortRef = useRef(null);
+  const kpisAbortRef = useRef(null);
+  const unidadesAbortRef = useRef(null);
+
   // Buscar Unidades e UFs que existem na tabela de agendamentos
-  const carregarUnidadesDisponiveis = async () => {
+  const carregarUnidadesDisponiveis = useCallback(async () => {
+    if (unidadesAbortRef.current) {
+      unidadesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    unidadesAbortRef.current = controller;
+
     try {
-      const res = await api.get('/gestao-solar/agendamentos/unidades');
+      const res = await api.get('/gestao-solar/agendamentos/unidades', { signal: controller.signal });
       setUnidadesDisponiveis(res.data?.data?.unidades || []);
       setUfsDisponiveis(res.data?.data?.ufs || []);
     } catch (err) {
-      console.error(err);
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+        console.error(err);
+      }
     }
-  };
+  }, []);
 
   // Buscar KPIs
-  const carregarKpis = async () => {
+  const carregarKpis = useCallback(async () => {
+    if (kpisAbortRef.current) {
+      kpisAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    kpisAbortRef.current = controller;
+
     try {
-      const res = await api.get('/gestao-solar/agendamentos/kpis');
+      const res = await api.get('/gestao-solar/agendamentos/kpis', { signal: controller.signal });
       setKpis(res.data?.data || { total: 0, realizados: 0, pendentes: 0, frustrados: 0 });
     } catch (err) {
-      console.error(err);
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+        console.error(err);
+      }
     }
-  };
+  }, []);
 
   // Buscar Agendamentos
   const carregarAgendamentos = useCallback(async () => {
+    if (agendamentosAbortRef.current) {
+      agendamentosAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    agendamentosAbortRef.current = controller;
+
     try {
       setLoading(true);
       const params = {
@@ -170,26 +196,42 @@ export default function Agendamentos() {
         data_fim: filtroDataFim || undefined
       };
 
-      const res = await api.get('/gestao-solar/agendamentos', { params });
+      const res = await api.get('/gestao-solar/agendamentos', {
+        params,
+        signal: controller.signal
+      });
       setAgendamentos(res.data?.data?.agendamentos || []);
       setTotalRegistros(res.data?.data?.pagination?.total || 0);
       setTotalPaginas(res.data?.data?.pagination?.total_pages || 1);
     } catch (err) {
-      console.error(err);
-      toast.error('Não foi possível carregar os agendamentos.');
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+        console.error(err);
+        toast.error('Não foi possível carregar os agendamentos.');
+      }
     } finally {
-      setLoading(false);
+      if (agendamentosAbortRef.current === controller) {
+        setLoading(false);
+      }
     }
   }, [paginaAtual, busca, filtroUnidade, filtroUF, filtroStatus, filtroServico, filtroTipoTecnico, filtroDataInicio, filtroDataFim]);
 
   useEffect(() => {
     carregarAgendamentos();
+    return () => {
+      if (agendamentosAbortRef.current) {
+        agendamentosAbortRef.current.abort();
+      }
+    };
   }, [carregarAgendamentos]);
 
   useEffect(() => {
     carregarKpis();
     carregarUnidadesDisponiveis();
-  }, []);
+    return () => {
+      if (kpisAbortRef.current) kpisAbortRef.current.abort();
+      if (unidadesAbortRef.current) unidadesAbortRef.current.abort();
+    };
+  }, [carregarKpis, carregarUnidadesDisponiveis]);
 
   const indexPrimeiro = totalRegistros === 0 ? 0 : (paginaAtual - 1) * ITENS_POR_PAGINA + 1;
   const indexUltimo = Math.min(paginaAtual * ITENS_POR_PAGINA, totalRegistros);

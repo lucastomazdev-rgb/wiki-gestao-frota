@@ -47,20 +47,24 @@ export default function FalhasFiltersBar({
   setFiltroTipo,
   filtroTipoFalha = 'TODOS',
   setFiltroTipoFalha,
-  filtroStatus = 'TODOS',
+  filtroStatus = [],
   setFiltroStatus,
   filtroBateriaBaixa = false,
   setFiltroBateriaBaixa,
   ordenacao = 'unidade_asc',
   setOrdenacao
 }) {
+  const temStatusAtivo = Array.isArray(filtroStatus)
+    ? filtroStatus.length > 0
+    : Boolean(filtroStatus && filtroStatus !== 'TODOS');
+
   const temFiltroAtivo = Boolean(
     filtroPlaca ||
     (filtroUF && filtroUF !== 'TODOS') ||
     (filtroUnidade && filtroUnidade !== 'TODAS') ||
     (filtroTipo && filtroTipo !== 'TODOS') ||
     (filtroTipoFalha && filtroTipoFalha !== 'TODOS') ||
-    (filtroStatus && filtroStatus !== 'TODOS') ||
+    temStatusAtivo ||
     filtroBateriaBaixa
   );
 
@@ -70,7 +74,7 @@ export default function FalhasFiltersBar({
     setFiltroUnidade('TODAS');
     setFiltroTipo('TODOS');
     setFiltroTipoFalha('TODOS');
-    setFiltroStatus('TODOS');
+    setFiltroStatus([]);
     if (setFiltroBateriaBaixa) setFiltroBateriaBaixa(false);
   };
 
@@ -185,9 +189,10 @@ export default function FalhasFiltersBar({
           <SearchableSelect
             placeholder="Todos os Status"
             options={STATUS_OPTIONS}
-            value={filtroStatus === 'TODOS' ? '' : filtroStatus}
-            onChange={(val) => setFiltroStatus(val || 'TODOS')}
+            value={Array.isArray(filtroStatus) ? filtroStatus : (filtroStatus && filtroStatus !== 'TODOS' ? [filtroStatus] : [])}
+            onChange={(val) => setFiltroStatus(Array.isArray(val) ? val : (val ? [val] : []))}
             icon={Filter}
+            multiple={true}
           />
         </div>
 

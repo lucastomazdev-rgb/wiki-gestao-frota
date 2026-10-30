@@ -46,7 +46,7 @@ export default function FalhasView() {
   const [filtroUnidade, setFiltroUnidade] = useState('TODAS');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
   const [filtroTipoFalha, setFiltroTipoFalha] = useState('TODOS');
-  const [filtroStatus, setFiltroStatus] = useState('TODOS');
+  const [filtroStatus, setFiltroStatus] = useState([]);
   const [filtroBateriaBaixa, setFiltroBateriaBaixa] = useState(false);
   const [ordenacao, setOrdenacao] = useState('unidade_asc');
 
@@ -58,6 +58,7 @@ export default function FalhasView() {
 
   // Estados de loading
   const [carregando, setCarregando] = useState(true);
+  const [exportando, setExportando] = useState(false);
 
   // Modais
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -113,21 +114,23 @@ export default function FalhasView() {
   };
 
   const abortControllerRef = useRef(null);
+  const loteAtivoIdRef = useRef(null);
 
   // Carregar dados das falhas do backend
   const carregarFalhas = useCallback(async (loteIdEspecifico = null, resetPage = false) => {
+    let controller = null;
     try {
       setCarregando(true);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      const controller = new AbortController();
+      controller = new AbortController();
       abortControllerRef.current = controller;
 
       const pageToUse = resetPage ? 1 : paginaAtual;
       if (resetPage) setPaginaAtual(1);
 
-      const targetLoteId = loteIdEspecifico || loteAtivo?.id || 'latest';
+      const targetLoteId = loteIdEspecifico || loteAtivoIdRef.current || 'latest';
 
       let sortBy = 'unidade';
       let sortDir = 'asc';
@@ -152,7 +155,11 @@ export default function FalhasView() {
       if (filtroUnidade !== 'TODAS') params.unidade = filtroUnidade;
       if (filtroTipo !== 'TODOS') params.tipo_veiculo = filtroTipo;
       if (filtroTipoFalha !== 'TODOS') params.tipo_falha = filtroTipoFalha;
-      if (filtroStatus !== 'TODOS') params.status = filtroStatus;
+      if (Array.isArray(filtroStatus) && filtroStatus.length > 0) {
+        params.status = filtroStatus.join(',');
+      } else if (typeof filtroStatus === 'string' && filtroStatus && filtroStatus !== 'TODOS') {
+        params.status = filtroStatus;
+      }
       if (filtroBateriaBaixa) params.bateria_baixa = 'true';
 
       const res = await api.get('/gestao-solar/falhas', {
@@ -163,6 +170,7 @@ export default function FalhasView() {
       const { data } = res.data;
       setRegistros(data?.registros || []);
       setLotes(data?.lotes || []);
+      loteAtivoIdRef.current = data?.lote?.id || null;
       setLoteAtivo(data?.lote || null);
       setKpis(data?.kpis || {
         total: 0,
@@ -181,10 +189,11 @@ export default function FalhasView() {
         toast.error('Erro ao carregar dados das falhas.');
       }
     } finally {
-      setCarregando(false);
+      if (abortControllerRef.current === controller) {
+        setCarregando(false);
+      }
     }
   }, [
-    loteAtivo?.id,
     paginaAtual,
     ordenacao,
     filtroPlacaDebounced,
@@ -199,12 +208,18 @@ export default function FalhasView() {
   // Disparar busca ao alterar filtros
   useEffect(() => {
     carregarFalhas();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [carregarFalhas]);
 
   // Handler de troca de lote (data histórica)
   const handleSelectLote = (novoLoteId) => {
     const loteEncontrado = lotes.find((l) => l.id === novoLoteId);
     if (loteEncontrado) {
+      loteAtivoIdRef.current = loteEncontrado.id;
       setLoteAtivo(loteEncontrado);
       carregarFalhas(novoLoteId, true);
     }
@@ -213,6 +228,7 @@ export default function FalhasView() {
   // Handler de sucesso ao importar nova planilha
   const handleImportSuccess = (novoLote) => {
     if (novoLote) {
+      loteAtivoIdRef.current = novoLote.id;
       setLoteAtivo(novoLote);
     }
     setFiltroPlaca('');
@@ -220,7 +236,7 @@ export default function FalhasView() {
     setFiltroUnidade('TODAS');
     setFiltroTipo('TODOS');
     setFiltroTipoFalha('TODOS');
-    setFiltroStatus('TODOS');
+    setFiltroStatus([]);
     carregarFalhas(novoLote?.id || 'latest', true);
   };
 
@@ -230,12 +246,152 @@ export default function FalhasView() {
     setRegistros((prev) =>
       prev.map((r) => (r.id === regAtualizado.id ? { ...r, ...regAtualizado } : r))
     );
+    carregarFalhas(null, false);
   };
 
   // Resetar página ao mudar filtros locais
   const handleFilterChange = (setter, value) => {
     setPaginaAtual(1);
     setter(value);
+  };
+
+  // Exportar planilha Excel (.xlsx) com todas as placas do filtro ativo
+  const handleExportarExcel = async () => {
+    if (!loteAtivo || totalRegistros === 0) {
+      toast.error('Nenhuma placa encontrada para exportar.');
+      return;
+    }
+
+    try {
+      setExportando(true);
+
+      let listaParaExportar = registros;
+
+      // Se houver mais páginas além da atual, busca todos os registros do filtro ativo
+      if (totalRegistros > registros.length || paginaAtual > 1) {
+        let sortBy = 'unidade';
+        let sortDir = 'asc';
+        if (ordenacao === 'placa_asc') {
+          sortBy = 'placa';
+          sortDir = 'asc';
+        } else if (ordenacao === 'ultima_desc') {
+          sortBy = 'ultima_transmissao';
+          sortDir = 'desc';
+        }
+
+        const params = {
+          lote_id: loteAtivoIdRef.current || loteAtivo?.id || 'latest',
+          page: 1,
+          limit: 'all',
+          sort_by: sortBy,
+          sort_dir: sortDir
+        };
+
+        if (filtroPlacaDebounced) params.busca = filtroPlacaDebounced;
+        if (filtroUF !== 'TODOS') params.uf = filtroUF;
+        if (filtroUnidade !== 'TODAS') params.unidade = filtroUnidade;
+        if (filtroTipo !== 'TODOS') params.tipo_veiculo = filtroTipo;
+        if (filtroTipoFalha !== 'TODOS') params.tipo_falha = filtroTipoFalha;
+        if (Array.isArray(filtroStatus) && filtroStatus.length > 0) {
+          params.status = filtroStatus.join(',');
+        } else if (typeof filtroStatus === 'string' && filtroStatus && filtroStatus !== 'TODOS') {
+          params.status = filtroStatus;
+        }
+        if (filtroBateriaBaixa) params.bateria_baixa = 'true';
+
+        const res = await api.get('/gestao-solar/falhas', { params });
+        listaParaExportar = res.data?.data?.registros || [];
+      }
+
+      if (listaParaExportar.length === 0) {
+        toast.error('Nenhuma placa encontrada para exportar.');
+        return;
+      }
+
+      const formatarDataHoraExcel = (dataStr) => {
+        if (!dataStr) return '-';
+        const d = new Date(dataStr);
+        if (isNaN(d.getTime())) return '-';
+        return d.toLocaleString('pt-BR', {
+          timeZone: 'UTC',
+          dateStyle: 'short',
+          timeStyle: 'short'
+        });
+      };
+
+      const formatarDataSimplesExcel = (dataStr) => {
+        if (!dataStr) return '';
+        const d = new Date(dataStr);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+      };
+
+      const formatarBateriaExcel = (val) => {
+        if (val === null || val === undefined || val === '') return 'S/ Bat';
+        const str = String(val).trim();
+        return str.toLowerCase().endsWith('v') ? str : `${str}V`;
+      };
+
+      const dadosExportacao = listaParaExportar.map((item) => {
+        const ag = item.agendamento;
+        const dataAg = ag?.data_agendamento ? formatarDataSimplesExcel(ag.data_agendamento) : '';
+        const statusAgendamento = ag
+          ? `${ag.status}${dataAg ? ` (${dataAg})` : ''}`
+          : '';
+
+        return {
+          'Placa': item.placa || '',
+          'Tipo Veículo': item.tipo_veiculo || '',
+          'Classificação': item.tipo_falha === 'FALHA RECORRENTE' ? 'Falha Recorrente' : 'Nova Falha',
+          'Unidade': item.unidade || '',
+          'UF': item.uf || '',
+          'Última Transmissão': formatarDataHoraExcel(item.ultima_transmissao),
+          'Bateria': formatarBateriaExcel(item.nivel_bateria),
+          'Status Tratativa': item.status_tratativa || 'Pendente de Contato',
+          'Data Contato': formatarDataSimplesExcel(item.data_contato),
+          'Agendamento': statusAgendamento,
+          'Técnico Agendamento': ag?.nome_tecnico || '',
+          'Ordem de Serviço': item.ordem_servico || ag?.numero_os || '',
+          'Observação': item.observacao || ''
+        };
+      });
+
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(dadosExportacao);
+      ws['!cols'] = [
+        { wch: 12 }, // Placa
+        { wch: 16 }, // Tipo Veículo
+        { wch: 18 }, // Classificação
+        { wch: 24 }, // Unidade
+        { wch: 6 },  // UF
+        { wch: 20 }, // Última Transmissão
+        { wch: 10 }, // Bateria
+        { wch: 22 }, // Status Tratativa
+        { wch: 14 }, // Data Contato
+        { wch: 24 }, // Agendamento
+        { wch: 22 }, // Técnico Agendamento
+        { wch: 18 }, // Ordem de Serviço
+        { wch: 35 }  // Observação
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Falhas');
+
+      const dataLote = loteAtivo?.data_extracao
+        ? new Date(loteAtivo.data_extracao).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      const sufixoUnidade = filtroUnidade && filtroUnidade !== 'TODAS'
+        ? `_${filtroUnidade.toLowerCase().replace(/[^a-z0-9]+/gi, '_')}`
+        : '';
+
+      XLSX.writeFile(wb, `falhas_solar${sufixoUnidade}_${dataLote}.xlsx`);
+      toast.success(`Planilha exportada com ${listaParaExportar.length} placa(s)!`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao exportar a planilha de falhas.');
+    } finally {
+      setExportando(false);
+    }
   };
 
   return (
@@ -302,6 +458,9 @@ export default function FalhasView() {
             onOpenImportModal={() => setIsImportModalOpen(true)}
             onOpenBaixarModal={() => setIsBaixarModalOpen(true)}
             onOpenMassaModal={() => setIsMassaModalOpen(true)}
+            onExportExcel={handleExportarExcel}
+            exportando={exportando}
+            totalRegistros={totalRegistros}
             carregando={carregando}
           />
 
