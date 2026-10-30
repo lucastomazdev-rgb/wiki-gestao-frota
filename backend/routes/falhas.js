@@ -352,6 +352,393 @@ export default function createFalhasRouter(prisma, protect) {
   });
 
   // =========================================================================
+  // =========================================================================
+  // 1.8 PAINEL ANALÍTICO DE FALHAS (DASHBOARD ANALÍTICO GESTÃO SOLAR)
+  // =========================================================================
+  router.get('/falhas/analytics', async (req, res, next) => {
+    try {
+      const { uf, unidade } = req.query;
+      const ufFilter = uf && uf !== 'TODOS' ? String(uf).trim().toUpperCase() : null;
+      const unidadeFilter = unidade && unidade !== 'TODAS' ? String(unidade).trim() : null;
+
+      // Helpers de normalização
+      const isFalhaRealTratativa = (status) => {
+        const st = String(status || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toLowerCase();
+        return (
+          st === 'aguardando tecnico' ||
+          st === 'agendado manutencao' ||
+          st === 'agendando manutencao'
+        );
+      };
+
+      const normalizarCategoriaVeiculo = (rawTipo) => {
+        const t = String(rawTipo || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toUpperCase();
+        if (t.includes('CAMINH') || t.includes('PESAD') || t.includes('CARRETA') || t === 'CAM') return 'CAM';
+        if (t.includes('MOTO') || t === 'MOT') return 'MOT';
+        if (t.includes('VIDEO') || t.includes('CAMER') || t.includes('DASH') || t === 'VID') return 'VID';
+        return 'OUTROS';
+      };
+
+      const classificarFaixaAgendamento = (pct) => {
+        if (pct <= 20) return 'critico';    // 0% - 20%: Vermelho forte
+        if (pct <= 50) return 'alerta';     // 21% - 50%: Vermelho mais claro
+        if (pct <= 70) return 'atencao';    // 51% - 70%: Amarelo
+        return 'saudavel';                  // 71% - 100%: Verde
+      };
+
+      // 1. Buscar sempre o lote mais recente (última data de extração)
+      const loteMaisRecente = await prisma.falhas_lotes.findFirst({
+        orderBy: { data_extracao: 'desc' }
+      });
+
+      // Buscar total de veículos da frota (tabela instalacoes) e mapa de tipo_veiculo/unidade por placa
+      const instalacoesWhere = {};
+      if (ufFilter || unidadeFilter) {
+        instalacoesWhere.unidades_clientes = {};
+        if (ufFilter) instalacoesWhere.unidades_clientes.uf = ufFilter;
+        if (unidadeFilter) instalacoesWhere.unidades_clientes.nome_unidade = unidadeFilter;
+      }
+
+      const [totalFrotaFiltrada, todasInstalacoesMeta] = await Promise.all([
+        prisma.instalacoes.count({ where: instalacoesWhere }),
+        prisma.instalacoes.findMany({
+          select: {
+            placa: true,
+            modelos_rastreadores: { select: { tipo_veiculo: true } },
+            unidades_clientes: { select: { nome_unidade: true, uf: true } }
+          }
+        })
+      ]);
+
+      const frotaPorPlaca = new Map();
+      const ufsFrotaSet = new Set();
+      const unidadesFrotaSet = new Set();
+      for (const inst of todasInstalacoesMeta) {
+        const pNorm = normalizePlate(inst.placa);
+        if (pNorm) frotaPorPlaca.set(pNorm, inst);
+        const instUf = inst.unidades_clientes?.uf?.trim()?.toUpperCase();
+        const instUnidade = inst.unidades_clientes?.nome_unidade?.trim();
+        if (instUf) ufsFrotaSet.add(instUf);
+        if (instUnidade && (!ufFilter || instUf === ufFilter)) {
+          unidadesFrotaSet.add(instUnidade);
+        }
+      }
+
+      if (!loteMaisRecente) {
+        return res.status(200).json({
+          status: 'success',
+          data: {
+            lote: null,
+            filtros_disponiveis: {
+              ufs: Array.from(ufsFrotaSet).sort(),
+              unidades: Array.from(unidadesFrotaSet).sort()
+            },
+            kpis: {
+              total_falhas: 0,
+              falhas_reais: 0,
+              total_frota: totalFrotaFiltrada,
+              saude_frota_pct: 100,
+              proporcao_falha_real_pct: 0,
+              bateria_critica: { total: 0, CAM: 0, MOT: 0, VID: 0, OUTROS: 0 }
+            },
+            cobertura_agendamentos: {
+              total_falhas_reais: 0,
+              presentes_em_agendamentos: 0,
+              confirmados_agendado: 0,
+              presentes_outro_status: 0,
+              ausentes_em_agendamentos: 0,
+              pendentes_agendar: 0,
+              pct_agendado: 100,
+              pct_pendente: 0,
+              faixa_cor: 'saudavel',
+              placas_detalhe: []
+            },
+            top_5_unidades: [],
+            distribuicao_tratativas: []
+          }
+        });
+      }
+
+      // 2. Buscar todos os registros do último lote
+      const registrosLote = await prisma.falhas_registros.findMany({
+        where: { lote_id: loteMaisRecente.id },
+        select: {
+          id: true,
+          placa: true,
+          unidade: true,
+          uf: true,
+          tipo_veiculo: true,
+          modulo: true,
+          ultima_transmissao: true,
+          nivel_bateria: true,
+          tipo_falha: true,
+          status_tratativa: true,
+          ordem_servico: true,
+          data_contato: true,
+          observacao: true
+        }
+      });
+
+      // Enriquecer registros com dados da tabela instalacoes caso falte UF/Unidade/Tipo
+      const ufsSet = new Set(ufsFrotaSet);
+      const unidadesSet = new Set(unidadesFrotaSet);
+
+      const registrosEnriquecidos = registrosLote.map((r) => {
+        const pNorm = normalizePlate(r.placa);
+        const inst = frotaPorPlaca.get(pNorm);
+        const ufFinal = (r.uf || inst?.unidades_clientes?.uf || '').trim().toUpperCase();
+        const unidadeFinal = (r.unidade || inst?.unidades_clientes?.nome_unidade || 'Não informada').trim();
+        const tipoBruto = r.tipo_veiculo || inst?.modelos_rastreadores?.tipo_veiculo || '';
+        const categoriaVeiculo = normalizarCategoriaVeiculo(tipoBruto);
+        const batCritica = isBateriaBaixa(r.nivel_bateria);
+        const falhaReal = isFalhaRealTratativa(r.status_tratativa);
+
+        if (ufFinal) ufsSet.add(ufFinal);
+        if (unidadeFinal && (!ufFilter || ufFinal === ufFilter)) {
+          unidadesSet.add(unidadeFinal);
+        }
+
+        return {
+          ...r,
+          placaNorm: pNorm,
+          ufFinal,
+          unidadeFinal,
+          tipoBruto,
+          categoriaVeiculo,
+          batCritica,
+          falhaReal
+        };
+      });
+
+      // 3. Filtrar registros conforme UF e Unidade selecionadas para os KPIs
+      const registrosFiltrados = registrosEnriquecidos.filter((r) => {
+        if (ufFilter && r.ufFinal !== ufFilter) return false;
+        if (unidadeFilter && r.unidadeFinal !== unidadeFilter) return false;
+        return true;
+      });
+
+      // 4. Calcular Super KPIs
+      const totalFalhas = registrosFiltrados.length;
+      const registrosFalhasReais = registrosFiltrados.filter((r) => r.falhaReal);
+      const falhasReaisCount = registrosFalhasReais.length;
+
+      const proporcaoFalhaRealNum = totalFrotaFiltrada > 0
+        ? (falhasReaisCount / totalFrotaFiltrada) * 100
+        : 0;
+      const saudeFrotaNum = totalFrotaFiltrada > 0
+        ? Math.max(0, 100 - proporcaoFalhaRealNum)
+        : 100;
+
+      const bateriaCriticaStats = { total: 0, CAM: 0, MOT: 0, VID: 0, OUTROS: 0 };
+      const tratativasMap = new Map();
+
+      for (const r of registrosFiltrados) {
+        if (r.batCritica) {
+          bateriaCriticaStats.total++;
+          if (r.categoriaVeiculo === 'CAM') bateriaCriticaStats.CAM++;
+          else if (r.categoriaVeiculo === 'MOT') bateriaCriticaStats.MOT++;
+          else if (r.categoriaVeiculo === 'VID') bateriaCriticaStats.VID++;
+          else bateriaCriticaStats.OUTROS++;
+        }
+
+        const st = r.status_tratativa || 'Pendente de Contato';
+        tratativasMap.set(st, (tratativasMap.get(st) || 0) + 1);
+      }
+
+      // 5. Top 5 Unidades com maior número de falhas (Opção A: Eixo X = Top 5 Unidades)
+      // Se houver filtro de UF, ranqueia as Top 5 daquela UF; se houver filtro de unidade única, mantém a visão da UF/Brasil para comparação
+      const baseTopUnidades = ufFilter
+        ? registrosEnriquecidos.filter((r) => r.ufFinal === ufFilter)
+        : registrosEnriquecidos;
+
+      const unidadesAgregadas = new Map();
+      for (const r of baseTopUnidades) {
+        const key = r.unidadeFinal || 'Não informada';
+        if (!unidadesAgregadas.has(key)) {
+          unidadesAgregadas.set(key, {
+            unidade: key,
+            uf: r.ufFinal || '',
+            total_falhas: 0,
+            falhas_reais: 0,
+            bateria_critica: 0
+          });
+        }
+        const entry = unidadesAgregadas.get(key);
+        entry.total_falhas++;
+        if (r.falhaReal) entry.falhas_reais++;
+        if (r.batCritica) entry.bateria_critica++;
+      }
+
+      const top5Unidades = Array.from(unidadesAgregadas.values())
+        .sort((a, b) => {
+          if (b.total_falhas !== a.total_falhas) return b.total_falhas - a.total_falhas;
+          return b.falhas_reais - a.falhas_reais;
+        })
+        .slice(0, 5);
+
+      // 6. Cruzamento de Falhas Reais x Tabela Agendamentos
+      // Regra estrita: se uma placa aparecer mais de uma vez em agendamentos, optar SEMPRE pela versão mais recente criada (criado_em DESC)
+      const placasReaisBusca = new Set();
+      for (const r of registrosFalhasReais) {
+        if (r.placa) placasReaisBusca.add(r.placa.trim());
+        if (r.placaNorm) placasReaisBusca.add(r.placaNorm);
+      }
+
+      const ultimoAgendamentoPorPlaca = new Map();
+      if (placasReaisBusca.size > 0 && prisma.agendamentos) {
+        const agendamentosDasFalhasReais = await prisma.agendamentos.findMany({
+          where: {
+            placa: { in: Array.from(placasReaisBusca) }
+          },
+          select: {
+            id: true,
+            placa: true,
+            data_agendamento: true,
+            status: true,
+            servico: true,
+            tipo_tecnico: true,
+            nome_tecnico: true,
+            numero_os: true,
+            criado_em: true,
+            atualizado_em: true
+          },
+          orderBy: [
+            { criado_em: 'desc' },
+            { atualizado_em: 'desc' }
+          ]
+        });
+
+        for (const ag of agendamentosDasFalhasReais) {
+          const pNorm = normalizePlate(ag.placa);
+          // Como está ordenado por criado_em DESC, o primeiro registro encontrado para a placa é garantidamente o último criado
+          if (pNorm && !ultimoAgendamentoPorPlaca.has(pNorm)) {
+            ultimoAgendamentoPorPlaca.set(pNorm, ag);
+          }
+        }
+      }
+
+      let presentesEmAgendamentos = 0;
+      let confirmadosAgendado = 0;
+      let presentesOutroStatus = 0;
+      let ausentesEmAgendamentos = 0;
+      const placasDetalhe = [];
+
+      for (const r of registrosFalhasReais) {
+        const ultimoAg = ultimoAgendamentoPorPlaca.get(r.placaNorm) || null;
+        const statusAg = ultimoAg?.status ? String(ultimoAg.status).trim() : null;
+        const isStatusAgendado = statusAg !== null && statusAg.toLowerCase() === 'agendado';
+
+        let situacaoAgendamento = 'SEM_REGISTRO';
+        if (ultimoAg) {
+          presentesEmAgendamentos++;
+          if (isStatusAgendado) {
+            confirmadosAgendado++;
+            situacaoAgendamento = 'AGENDADO';
+          } else {
+            presentesOutroStatus++;
+            situacaoAgendamento = 'OUTRO_STATUS';
+          }
+        } else {
+          ausentesEmAgendamentos++;
+        }
+
+        placasDetalhe.push({
+          id: r.id,
+          placa: r.placa,
+          unidade: r.unidadeFinal,
+          uf: r.ufFinal,
+          tipo_veiculo: r.tipoBruto || r.categoriaVeiculo,
+          categoria_veiculo: r.categoriaVeiculo,
+          status_tratativa: r.status_tratativa,
+          nivel_bateria: r.nivel_bateria,
+          bateria_critica: r.batCritica,
+          ordem_servico: r.ordem_servico || ultimoAg?.numero_os || null,
+          ultima_transmissao: r.ultima_transmissao,
+          situacao_agendamento: situacaoAgendamento,
+          ultimo_agendamento: ultimoAg ? {
+            id: ultimoAg.id,
+            status: ultimoAg.status,
+            data_agendamento: ultimoAg.data_agendamento,
+            servico: ultimoAg.servico,
+            nome_tecnico: ultimoAg.nome_tecnico,
+            tipo_tecnico: ultimoAg.tipo_tecnico,
+            numero_os: ultimoAg.numero_os,
+            criado_em: ultimoAg.criado_em
+          } : null
+        });
+      }
+
+      const pendentesAgendar = Math.max(0, falhasReaisCount - confirmadosAgendado);
+      const pctAgendado = falhasReaisCount > 0
+        ? Number(((confirmadosAgendado / falhasReaisCount) * 100).toFixed(1))
+        : 100;
+      const pctPendente = falhasReaisCount > 0
+        ? Number((100 - pctAgendado).toFixed(1))
+        : 0;
+      const faixaCor = classificarFaixaAgendamento(pctAgendado);
+
+      const distribuicaoTratativas = Array.from(tratativasMap.entries())
+        .map(([status, quantidade]) => ({
+          status,
+          quantidade,
+          percentual: totalFalhas > 0 ? Number(((quantidade / totalFalhas) * 100).toFixed(1)) : 0,
+          is_falha_real: isFalhaRealTratativa(status)
+        }))
+        .sort((a, b) => b.quantidade - a.quantidade);
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          lote: {
+            id: loteMaisRecente.id,
+            data_extracao: loteMaisRecente.data_extracao,
+            descricao: loteMaisRecente.descricao,
+            total_veiculos: loteMaisRecente.total_veiculos,
+            novas_falhas: loteMaisRecente.novas_falhas,
+            recorrentes: loteMaisRecente.recorrentes,
+            criado_em: loteMaisRecente.criado_em
+          },
+          filtros_disponiveis: {
+            ufs: Array.from(ufsSet).sort(),
+            unidades: Array.from(unidadesSet).sort()
+          },
+          kpis: {
+            total_falhas: totalFalhas,
+            falhas_reais: falhasReaisCount,
+            total_frota: totalFrotaFiltrada,
+            saude_frota_pct: Number(saudeFrotaNum.toFixed(1)),
+            proporcao_falha_real_pct: Number(proporcaoFalhaRealNum.toFixed(1)),
+            bateria_critica: bateriaCriticaStats
+          },
+          cobertura_agendamentos: {
+            total_falhas_reais: falhasReaisCount,
+            presentes_em_agendamentos: presentesEmAgendamentos,
+            confirmados_agendado: confirmadosAgendado,
+            presentes_outro_status: presentesOutroStatus,
+            ausentes_em_agendamentos: ausentesEmAgendamentos,
+            pendentes_agendar: pendentesAgendar,
+            pct_agendado: pctAgendado,
+            pct_pendente: pctPendente,
+            faixa_cor: faixaCor,
+            placas_detalhe: placasDetalhe
+          },
+          top_5_unidades: top5Unidades,
+          distribuicao_tratativas: distribuicaoTratativas
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // 2. LISTAR REGISTROS DE FALHAS COM FILTROS, KPIS E PAGINAÇÃO
   // =========================================================================
   router.get('/falhas', async (req, res, next) => {

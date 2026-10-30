@@ -34,6 +34,7 @@ const Tarefas = lazy(() => import('./components/gestao-solar/Tarefas'));
 const DashboardSolar = lazy(() => import('./components/gestao-solar/Dashboard'));
 const Agendamentos = lazy(() => import('./components/gestao-solar/Agendamentos'));
 const FalhasGestaoSolar = lazy(() => import('./components/gestao-solar/falhas/FalhasView'));
+const DashboardAnaliticoFalhas = lazy(() => import('./components/gestao-solar/DashboardAnaliticoFalhas'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,7 +52,7 @@ function parseHash(hash) {
   const parts = cleanHash.split('/').filter(Boolean);
 
   if (parts[0] === 'solar') {
-    const validSolarTabs = ['dashboard', 'veiculos', 'falhas', 'agendamentos', 'tarefas', 'retiradas', 'tecnicos', 'tutoriais'];
+    const validSolarTabs = ['dashboard', 'veiculos', 'falhas', 'analitico-falhas', 'agendamentos', 'tarefas', 'retiradas', 'tecnicos', 'tutoriais'];
     const solarTab = validSolarTabs.includes(parts[1]) ? parts[1] : 'dashboard';
     return { platformMode: 'gestao_solar', currentTab: 'home', articleSlug: null, solarTab };
   }
@@ -393,6 +394,7 @@ function AppContent() {
                   {currentSolarTab === 'dashboard' ? 'Dashboard & Indicadores Estratégicos' :
                    currentSolarTab === 'veiculos' ? 'Veículos Operacionais' : 
                    currentSolarTab === 'falhas' ? 'Tratativa de Falhas de Comunicação' :
+                   currentSolarTab === 'analitico-falhas' ? 'Análise Gerencial de Falhas & Agendamentos' :
                    currentSolarTab === 'agendamentos' ? 'Agendamentos & Manutenções' :
                    currentSolarTab === 'tarefas' ? 'Quadro de Tarefas & Demandas' :
                    currentSolarTab === 'retiradas' ? 'Retiradas & Baixas' : 
@@ -428,6 +430,9 @@ function AppContent() {
             )}
             {currentSolarTab === 'falhas' && (
               <FalhasGestaoSolar />
+            )}
+            {currentSolarTab === 'analitico-falhas' && (
+              <DashboardAnaliticoFalhas />
             )}
             {currentSolarTab === 'agendamentos' && (
               <Agendamentos />

@@ -13,7 +13,8 @@ import {
   Kanban,
   LayoutDashboard,
   CalendarDays,
-  AlertTriangle
+  AlertTriangle,
+  LineChart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -46,6 +47,7 @@ export default function SidebarGestaoSolar({
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'veiculos', label: 'Veículos & Frota', icon: Truck },
     { key: 'falhas', label: 'Falhas de Comunicação', icon: AlertTriangle },
+    { key: 'analitico-falhas', label: 'Análise de Falhas', icon: LineChart },
     { key: 'agendamentos', label: 'Agendamentos', icon: CalendarDays },
     { key: 'tarefas', label: 'Tarefas & Demandas', icon: Kanban },
     { key: 'retiradas', label: 'Retiradas & Baixas', icon: LogOut },
