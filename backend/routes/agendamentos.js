@@ -387,9 +387,10 @@ export default function createAgendamentosRouter(prisma, protect) {
       const { page, limit } = req.query;
       const where = buildAgendamentosWhere(req.query);
 
-      const p = Math.max(1, parseInt(page, 10) || 1);
-      const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
-      const skip = (p - 1) * l;
+      const isUnlimited = limit === 'all' || limit === '5000' || limit === '10000' || limit === '-1';
+      const p = isUnlimited ? 1 : Math.max(1, parseInt(page, 10) || 1);
+      const l = isUnlimited ? 20000 : Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+      const skip = isUnlimited ? 0 : (p - 1) * l;
 
       // Execução sequencial para poupar conexões concorrentes no pool do Supabase (PgBouncer)
       const total = await prisma.agendamentos.count({ where });
@@ -418,8 +419,8 @@ export default function createAgendamentosRouter(prisma, protect) {
           pagination: {
             total,
             page: p,
-            limit: l,
-            total_pages: Math.ceil(total / l) || 1
+            limit: isUnlimited ? total : l,
+            total_pages: isUnlimited ? 1 : (Math.ceil(total / l) || 1)
           }
         }
       });

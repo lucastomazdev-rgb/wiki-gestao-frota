@@ -95,6 +95,7 @@ export default function Agendamentos() {
 
   const [agendamentoParaExcluir, setAgendamentoParaExcluir] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   // Contagem de filtros ativos para badge de limpeza
   const activeFiltersCount = [
@@ -285,35 +286,77 @@ export default function Agendamentos() {
     }
   };
 
-  // Exportar para Excel (XLSX)
-  const handleExportarExcel = () => {
-    if (agendamentos.length === 0) {
-      toast.error('Nenhum dado para exportar.');
+  // Exportar para Excel (XLSX) - respeita todos os filtros ativos trazendo o total completo
+  const handleExportarExcel = async () => {
+    if (totalRegistros === 0) {
+      toast.error('Nenhum agendamento encontrado para exportar.');
       return;
     }
 
-    const dadosExportacao = agendamentos.map((item) => ({
-      'Data': item.data_agendamento ? formatarDataAgendamento(item.data_agendamento) : 'Aguardando Data',
-      'Placa': item.placa,
-      'Unidade': item.unidade || '',
-      'UF': item.uf || '',
-      'Tipo Veículo': item.tipo_veiculo || '',
-      'Responsável': item.nome_responsavel,
-      'Contato': item.contato_responsavel,
-      'O.S.': item.numero_os || '',
-      'Serviço': item.servico,
-      'Tipo Técnico': item.tipo_tecnico,
-      'Nome Técnico': item.nome_tecnico,
-      'Status': item.status,
-      'Motivo Frustrado': item.motivo_frustrado || '',
-      'Observações': item.observacoes || ''
-    }));
+    try {
+      setExportando(true);
 
-    const ws = XLSX.utils.json_to_sheet(dadosExportacao);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Agendamentos');
-    XLSX.writeFile(wb, `agendamentos_frota_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success('Planilha exportada com sucesso!');
+      let listaParaExportar = agendamentos;
+
+      // Se houver mais de uma página ou se não estiver na primeira página com tudo carregado, busca todos os registros filtrados
+      if (totalRegistros > agendamentos.length || paginaAtual > 1) {
+        const toastId = toast.loading(`Buscando ${totalRegistros} agendamentos para exportação...`);
+        try {
+          const params = {
+            page: 1,
+            limit: 'all',
+            busca: busca.trim() || undefined,
+            unidade: filtroUnidade || undefined,
+            uf: filtroUF || undefined,
+            status: filtroStatus.length > 0 ? filtroStatus.join(',') : undefined,
+            servico: filtroServico.length > 0 ? filtroServico.join(',') : undefined,
+            tipo_tecnico: filtroTipoTecnico || undefined,
+            data_inicio: filtroDataInicio || undefined,
+            data_fim: filtroDataFim || undefined
+          };
+
+          const res = await api.get('/gestao-solar/agendamentos', { params });
+          listaParaExportar = res.data?.data?.agendamentos || [];
+          toast.dismiss(toastId);
+        } catch (fetchErr) {
+          toast.dismiss(toastId);
+          throw fetchErr;
+        }
+      }
+
+      if (listaParaExportar.length === 0) {
+        toast.error('Nenhum agendamento encontrado para exportar.');
+        return;
+      }
+
+      const dadosExportacao = listaParaExportar.map((item) => ({
+        'Data': item.data_agendamento ? formatarDataAgendamento(item.data_agendamento) : 'Aguardando Data',
+        'Placa': item.placa,
+        'Unidade': item.unidade || '',
+        'UF': item.uf || '',
+        'Tipo Veículo': item.tipo_veiculo || '',
+        'Responsável': item.nome_responsavel,
+        'Contato': item.contato_responsavel,
+        'O.S.': item.numero_os || '',
+        'Serviço': item.servico,
+        'Tipo Técnico': item.tipo_tecnico,
+        'Nome Técnico': item.nome_tecnico,
+        'Status': item.status,
+        'Motivo Frustrado': item.motivo_frustrado || '',
+        'Observações': item.observacoes || ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dadosExportacao);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Agendamentos');
+      XLSX.writeFile(wb, `agendamentos_frota_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success(`Planilha exportada com sucesso! (${listaParaExportar.length} agendamento${listaParaExportar.length === 1 ? '' : 's'})`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao exportar planilha de agendamentos.');
+    } finally {
+      setExportando(false);
+    }
   };
 
   // Helper para abrir WhatsApp
@@ -346,10 +389,16 @@ export default function Agendamentos() {
           <button
             type="button"
             onClick={handleExportarExcel}
-            className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            disabled={exportando || totalRegistros === 0}
+            className={`px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer ${exportando ? 'opacity-70 cursor-wait' : ''} ${totalRegistros === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={`Exportar planilha Excel (.xlsx) com os ${totalRegistros} agendamentos do filtro atual`}
           >
-            <Download size={15} />
-            <span>Exportar Excel</span>
+            {exportando ? (
+              <RefreshCw size={15} className="animate-spin text-teal-600" />
+            ) : (
+              <Download size={15} />
+            )}
+            <span>{exportando ? 'Exportando...' : 'Exportar Excel'}</span>
           </button>
 
           <button
