@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import toast from 'react-hot-toast';
 import { 
   AlertCircle, 
   Loader, 
@@ -70,6 +71,10 @@ export default function Login() {
     }
 
     setValidationErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      const firstError = Object.values(errors)[0];
+      toast.error(firstError, { id: 'login-validation-error' });
+    }
     return Object.keys(errors).length === 0;
   };
 
@@ -83,11 +88,29 @@ export default function Login() {
     try {
       if (isRegister) {
         await register(email, password, name, requiresSetup ? setupToken : '');
+        toast.success('Conta criada com sucesso!');
       } else {
         await login(email, password);
+        toast.success('Login realizado com sucesso!');
       }
     } catch (err) {
-      setApiError(err.message || 'Falha na autenticação. Verifique os dados informados.');
+      const status = err.status || err.response?.status;
+      let userFriendlyMessage = err.message;
+
+      if (status === 401) {
+        userFriendlyMessage = 'E-mail ou senha incorretos. Verifique os dados digitados.';
+      } else if (status === 429) {
+        userFriendlyMessage = err.response?.data?.message || 'Muitas tentativas consecutivas de login. Aguarde um momento antes de tentar novamente.';
+      } else if (status >= 500) {
+        userFriendlyMessage = 'Erro interno do servidor ao processar o login. Tente novamente mais tarde.';
+      } else if (!err.response || err.code === 'ERR_NETWORK') {
+        userFriendlyMessage = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
+      } else if (!userFriendlyMessage) {
+        userFriendlyMessage = 'Falha na autenticação. Verifique os dados informados.';
+      }
+
+      setApiError(userFriendlyMessage);
+      toast.error(userFriendlyMessage, { id: 'login-error-toast' });
     } finally {
       setIsSubmitting(false);
     }

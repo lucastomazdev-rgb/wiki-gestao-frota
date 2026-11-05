@@ -13,12 +13,27 @@ import {
   Box, 
   AlertTriangle,
   ChevronRight,
+  ChevronLeft,
+  X,
   Eye,
   Edit2,
   Trash2,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
+
+const gerarPaginas = (atual, total) => {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (atual <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (atual >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', atual - 1, atual, atual + 1, '...', total];
+};
 
 export default function TabelaOrdensServico({
   ordens = [],
@@ -31,8 +46,13 @@ export default function TabelaOrdensServico({
   setFiltroPendenteDevolucao,
   filtroStatus,
   setFiltroStatus,
-  busca,
+  filtroTecnico = '',
+  setFiltroTecnico,
+  tecnicos = [],
+  busca = '',
   setBusca,
+  paginacao,
+  setPagina,
   onNovaOS
 }) {
   const [modalConfirmacaoDevolucao, setModalConfirmacaoDevolucao] = useState(null);
@@ -75,20 +95,64 @@ export default function TabelaOrdensServico({
     <div className="space-y-4">
       {/* Barra de Filtros e Busca */}
       <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        {/* Campo de Busca */}
+        {/* Campo de Busca (Placa, O.S, NF, Unidade, Serviço ou Técnico) */}
         <div className="relative flex-1 max-w-md">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por Placa, O.S, NF ou Unidade..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-teal-500/20 transition-all"
+            className="w-full pl-10 pr-9 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-teal-500/20 transition-all"
           />
+          {busca && (
+            <button
+              type="button"
+              onClick={() => setBusca('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer transition-colors"
+              title="Limpar busca"
+              aria-label="Limpar busca"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         {/* Filtros Rápidos */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Filtro por Técnico Terceirizado */}
+          <div className="relative">
+            <select
+              value={filtroTecnico}
+              onChange={(e) => setFiltroTecnico?.(e.target.value)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold outline-none cursor-pointer transition-all border max-w-[210px] truncate ${
+                filtroTecnico
+                  ? 'bg-teal-50 text-teal-800 border-teal-300 font-black shadow-2xs'
+                  : 'bg-slate-50 hover:bg-white text-slate-700 border-slate-200 focus:border-teal-500'
+              }`}
+              title="Filtrar por Técnico Terceirizado"
+            >
+              <option value="">Todos os Técnicos</option>
+              {tecnicos.map((tec) => (
+                <option key={tec.id} value={tec.id}>
+                  {tec.nome} {tec.regiao ? `(${tec.regiao})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro de Status */}
+          <select
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value)}
+            className="px-3.5 py-2 bg-slate-50 hover:bg-white border border-slate-200 focus:border-teal-500 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+          >
+            <option value="">Todos os Status</option>
+            <option value="Agendado">Agendado</option>
+            <option value="Aguardando data">Aguardando Data</option>
+            <option value="Realizado">Realizado</option>
+          </select>
+
           {/* Botão de Devoluções Pendentes */}
           <button
             type="button"
@@ -102,18 +166,6 @@ export default function TabelaOrdensServico({
             <RotateCcw size={14} className={filtroPendenteDevolucao ? 'animate-spin-slow' : ''} />
             <span>⚠️ Devoluções Pendentes</span>
           </button>
-
-          {/* Filtro de Status */}
-          <select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="px-3.5 py-2 bg-slate-50 hover:bg-white border border-slate-200 focus:border-teal-500 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-          >
-            <option value="">Todos os Status</option>
-            <option value="Agendado">Agendado</option>
-            <option value="Aguardando data">Aguardando Data</option>
-            <option value="Realizado">Realizado</option>
-          </select>
 
           {/* Botão Nova O.S */}
           <button
@@ -374,6 +426,63 @@ export default function TabelaOrdensServico({
           </table>
         </div>
       </div>
+
+      {/* Paginação de 15 em 15 */}
+      {paginacao && paginacao.total > 0 && (
+        <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="text-slate-500 font-medium text-[11px] sm:text-xs">
+            Exibindo <span className="font-black text-slate-900">{Math.min((paginacao.page - 1) * paginacao.limit + 1, paginacao.total)}</span> a{' '}
+            <span className="font-black text-slate-900">{Math.min(paginacao.page * paginacao.limit, paginacao.total)}</span> de{' '}
+            <span className="font-black text-teal-700">{paginacao.total}</span> Ordens de Serviço
+          </div>
+
+          {paginacao.totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPagina((prev) => Math.max(1, prev - 1))}
+                disabled={paginacao.page <= 1 || loading}
+                className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-slate-600 cursor-pointer shadow-2xs active:scale-95"
+                title="Página Anterior"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              <div className="flex items-center gap-1">
+                {gerarPaginas(paginacao.page, paginacao.totalPages).map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots-${idx}`} className="px-1 text-slate-300 font-bold select-none">...</span>
+                  ) : (
+                    <button
+                      key={`page-${p}`}
+                      type="button"
+                      onClick={() => setPagina(p)}
+                      disabled={loading}
+                      className={`min-w-[32px] h-[32px] flex items-center justify-center rounded-xl text-xs font-black transition-all border cursor-pointer ${
+                        paginacao.page === p
+                          ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-600'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPagina((prev) => Math.min(paginacao.totalPages, prev + 1))}
+                disabled={paginacao.page >= paginacao.totalPages || loading}
+                className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-slate-600 cursor-pointer shadow-2xs active:scale-95"
+                title="Próxima Página"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modal de Confirmação de Recebimento de Devolução */}
       {modalConfirmacaoDevolucao && (

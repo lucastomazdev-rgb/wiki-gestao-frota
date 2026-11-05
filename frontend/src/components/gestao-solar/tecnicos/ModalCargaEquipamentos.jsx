@@ -49,6 +49,15 @@ export default function ModalCargaEquipamentos({ isOpen, onClose, tecnico, onSuc
   const [itemParaExcluir, setItemParaExcluir] = useState(null);
   const [excluindoItem, setExcluindoItem] = useState(false);
 
+  // Lista local de equipamentos em posse para atualização imediata na interface
+  const [listaEquipamentos, setListaEquipamentos] = useState(tecnico?.equipamentos || []);
+
+  useEffect(() => {
+    if (isOpen && Array.isArray(tecnico?.equipamentos)) {
+      setListaEquipamentos(tecnico.equipamentos);
+    }
+  }, [isOpen, tecnico]);
+
   // Carregar sugestões de equipamentos padrão do banco
   useEffect(() => {
     if (isOpen) {
@@ -189,6 +198,11 @@ export default function ModalCargaEquipamentos({ isOpen, onClose, tecnico, onSuc
         motivo: 'Ajuste manual de saldo pelo gestor'
       });
 
+      // Atualização imediata do item na lista visual do modal
+      setListaEquipamentos(prev =>
+        prev.map(eq => eq.id === equipId ? { ...eq, quantidade: qtdNum } : eq)
+      );
+
       toast.success(res.data?.message || 'Saldo atualizado com sucesso!');
       setEquipamentoEmEdicao(null);
       onSuccess?.();
@@ -206,6 +220,10 @@ export default function ModalCargaEquipamentos({ isOpen, onClose, tecnico, onSuc
     try {
       setExcluindoItem(true);
       const res = await api.delete(`/gestao-solar/tecnicos/${tecnico.id}/equipamentos/${itemParaExcluir.id}`);
+      
+      // Remoção imediata do item na lista visual do modal
+      setListaEquipamentos(prev => prev.filter(eq => eq.id !== itemParaExcluir.id));
+
       toast.success(res.data?.message || 'Equipamento removido do técnico.');
       setItemParaExcluir(null);
       onSuccess?.();
@@ -279,7 +297,7 @@ export default function ModalCargaEquipamentos({ isOpen, onClose, tecnico, onSuc
             }`}
           >
             <Box size={14} />
-            <span>Editar Saldo em Posse ({tecnico.equipamentos?.length || 0})</span>
+            <span>Editar Saldo em Posse ({listaEquipamentos?.length || 0})</span>
           </button>
         </div>
 
@@ -503,9 +521,9 @@ export default function ModalCargaEquipamentos({ isOpen, onClose, tecnico, onSuc
                 </p>
               </div>
 
-              {tecnico.equipamentos && tecnico.equipamentos.length > 0 ? (
+              {listaEquipamentos && listaEquipamentos.length > 0 ? (
                 <div className="space-y-2.5">
-                  {tecnico.equipamentos.map((eq) => {
+                  {listaEquipamentos.map((eq) => {
                     const emEdicao = equipamentoEmEdicao === eq.id;
 
                     return (

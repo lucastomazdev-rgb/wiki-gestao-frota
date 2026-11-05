@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Users, 
   Wrench, 
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
+import { useDebounce } from '../../../hooks/useDebounce';
 import ConfirmModal from '../ConfirmModal';
 import CardTecnico from './CardTecnico';
 import ModalNovoTecnico from './ModalNovoTecnico';
@@ -62,8 +63,17 @@ export default function GestaoTecnicosTerceirizados() {
 
   // Filtros de Ordens de Serviço
   const [buscaOS, setBuscaOS] = useState('');
+  const debouncedBuscaOS = useDebounce(buscaOS, 350);
   const [filtroStatusOS, setFiltroStatusOS] = useState('');
+  const [filtroTecnicoOS, setFiltroTecnicoOS] = useState('');
   const [filtroPendenteDevolucao, setFiltroPendenteDevolucao] = useState(false);
+  const [paginaOS, setPaginaOS] = useState(1);
+  const [paginacaoOS, setPaginacaoOS] = useState({
+    total: 0,
+    page: 1,
+    limit: 15,
+    totalPages: 1
+  });
 
   // Modais
   const [modalTecnicoOpen, setModalTecnicoOpen] = useState(false);
@@ -89,7 +99,9 @@ export default function GestaoTecnicosTerceirizados() {
     try {
       setLoadingTecnicos(true);
       const res = await api.get('/gestao-solar/tecnicos');
-      setTecnicos(res.data?.data?.tecnicos || []);
+      const lista = res.data?.data?.tecnicos || [];
+      setTecnicos(lista);
+      setTecnicoParaCarga(prev => prev ? lista.find(t => t.id === prev.id) || prev : null);
     } catch (err) {
       console.error(err);
       toast.error('Não foi possível carregar a lista de técnicos.');
@@ -99,23 +111,30 @@ export default function GestaoTecnicosTerceirizados() {
   };
 
   // Carregar Ordens de Serviço
-  const fetchOrdens = async () => {
+  const fetchOrdens = useCallback(async (targetPage = paginaOS) => {
     try {
       setLoadingOrdens(true);
-      const params = {};
+      const params = {
+        page: targetPage,
+        limit: 15
+      };
       if (filtroStatusOS) params.status = filtroStatusOS;
+      if (filtroTecnicoOS) params.tecnico_id = filtroTecnicoOS;
       if (filtroPendenteDevolucao) params.pendente_devolucao = 'true';
-      if (buscaOS) params.busca = buscaOS;
+      if (debouncedBuscaOS && debouncedBuscaOS.trim()) params.busca = debouncedBuscaOS.trim();
 
       const res = await api.get('/gestao-solar/ordens-servicos', { params });
       setOrdens(res.data?.data?.ordens || []);
+      if (res.data?.data?.pagination) {
+        setPaginacaoOS(res.data.data.pagination);
+      }
     } catch (err) {
       console.error(err);
       toast.error('Erro ao carregar Ordens de Serviço.');
     } finally {
       setLoadingOrdens(false);
     }
-  };
+  }, [paginaOS, filtroStatusOS, filtroTecnicoOS, filtroPendenteDevolucao, debouncedBuscaOS]);
 
   const fetchKpis = async () => {
     try {
@@ -144,9 +163,25 @@ export default function GestaoTecnicosTerceirizados() {
     fetchAgendamentosPendentes();
   }, []);
 
+  // Monitora filtros de O.S. para resetar a paginação para 1
+  const prevFiltersRef = useRef({ filtroStatusOS, filtroTecnicoOS, filtroPendenteDevolucao, debouncedBuscaOS });
   useEffect(() => {
-    fetchOrdens();
-  }, [filtroStatusOS, filtroPendenteDevolucao]);
+    const prev = prevFiltersRef.current;
+    const mudouFiltro = 
+      prev.filtroStatusOS !== filtroStatusOS ||
+      prev.filtroTecnicoOS !== filtroTecnicoOS ||
+      prev.filtroPendenteDevolucao !== filtroPendenteDevolucao ||
+      prev.debouncedBuscaOS !== debouncedBuscaOS;
+
+    prevFiltersRef.current = { filtroStatusOS, filtroTecnicoOS, filtroPendenteDevolucao, debouncedBuscaOS };
+
+    if (mudouFiltro && paginaOS !== 1) {
+      setPaginaOS(1);
+      return;
+    }
+
+    fetchOrdens(paginaOS);
+  }, [fetchOrdens, paginaOS, filtroStatusOS, filtroTecnicoOS, filtroPendenteDevolucao, debouncedBuscaOS]);
 
   // Filtragem dos técnicos na visualização
   const tecnicosFiltrados = useMemo(() => {
@@ -513,8 +548,13 @@ export default function GestaoTecnicosTerceirizados() {
           setFiltroPendenteDevolucao={setFiltroPendenteDevolucao}
           filtroStatus={filtroStatusOS}
           setFiltroStatus={setFiltroStatusOS}
+          filtroTecnico={filtroTecnicoOS}
+          setFiltroTecnico={setFiltroTecnicoOS}
+          tecnicos={tecnicos}
           busca={buscaOS}
           setBusca={setBuscaOS}
+          paginacao={paginacaoOS}
+          setPagina={setPaginaOS}
           onNovaOS={() => handleAbrirLancamentoOS(null)}
         />
       )}

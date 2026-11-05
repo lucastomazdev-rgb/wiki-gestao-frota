@@ -784,12 +784,15 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         motivo: z.string().trim().max(255).optional()
       }).strict().parse(req.body);
 
+      let modeloEquipamento = '';
+
       const resultado = await prisma.$transaction(async (tx) => {
         const equipAtual = await tx.tecnico_equipamentos.findFirst({
           where: { id: equipId, tecnico_id }
         });
         if (!equipAtual) throw httpError(404, 'Equipamento não encontrado para este técnico.');
 
+        modeloEquipamento = equipAtual.modelo_equipamento;
         const qtdAnterior = equipAtual.quantidade;
         const diferenca = qtdNova - qtdAnterior;
         const update = await tx.tecnico_equipamentos.updateMany({
@@ -814,9 +817,11 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
         return tx.tecnico_equipamentos.findUnique({ where: { id: equipId } });
       }, { maxWait: 10000, timeout: 30000 });
 
+      const nomeFinal = resultado?.modelo_equipamento || modeloEquipamento || 'Equipamento';
+
       res.status(200).json({
         status: 'success',
-        message: `Saldo de "${equipAtual.modelo_equipamento}" ajustado com sucesso para ${qtdNova} un.`,
+        message: `Saldo de "${nomeFinal}" ajustado com sucesso para ${qtdNova} un.`,
         data: { equipamento: resultado }
       });
     } catch (error) {
@@ -986,16 +991,19 @@ export default function createTecnicosTerceirizadosRouter(prisma, protect) {
       }
 
       if (busca && busca.trim()) {
+        const termoBusca = busca.trim();
         where.OR = [
-          { placa: { contains: busca.trim(), mode: 'insensitive' } },
-          { numero_os: { contains: busca.trim(), mode: 'insensitive' } },
-          { numero_nf: { contains: busca.trim(), mode: 'insensitive' } },
-          { unidade: { contains: busca.trim(), mode: 'insensitive' } }
+          { placa: { contains: termoBusca, mode: 'insensitive' } },
+          { numero_os: { contains: termoBusca, mode: 'insensitive' } },
+          { numero_nf: { contains: termoBusca, mode: 'insensitive' } },
+          { unidade: { contains: termoBusca, mode: 'insensitive' } },
+          { nome_servico: { contains: termoBusca, mode: 'insensitive' } },
+          { tecnico: { nome: { contains: termoBusca, mode: 'insensitive' } } }
         ];
       }
 
       const p = Math.max(1, parseInt(page, 10) || 1);
-      const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+      const l = Math.min(100, Math.max(1, parseInt(limit, 10) || 15));
       const skip = (p - 1) * l;
 
       const [total, ordens] = await Promise.all([

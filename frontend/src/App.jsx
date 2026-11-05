@@ -323,7 +323,12 @@ function AppContent() {
 
   // Not Logged In
   if (!user) {
-    return <Login />;
+    return (
+      <>
+        <Login />
+        <AppToaster />
+      </>
+    );
   }
 
   // Handle article selection from home or search

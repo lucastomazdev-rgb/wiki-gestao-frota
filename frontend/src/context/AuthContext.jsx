@@ -52,9 +52,24 @@ export const AuthProvider = ({ children }) => {
         return true;
       }
     } catch (err) {
-      const message = err.response?.data?.message || 'E-mail ou senha incorretos.';
+      let message = err.response?.data?.message;
+      if (!message) {
+        if (!err.response || err.code === 'ERR_NETWORK') {
+          message = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
+        } else if (err.response?.status >= 500) {
+          message = 'Erro interno do servidor. Tente novamente mais tarde.';
+        } else if (err.response?.status === 401) {
+          message = 'E-mail ou senha incorretos.';
+        } else {
+          message = 'Falha na autenticação. Tente novamente.';
+        }
+      }
       setError(message);
-      throw new Error(message, { cause: err });
+      const customErr = new Error(message);
+      customErr.status = err.response?.status;
+      customErr.response = err.response;
+      customErr.code = err.code;
+      throw customErr;
     } finally {
       setLoading(false);
     }
@@ -75,9 +90,22 @@ export const AuthProvider = ({ children }) => {
         return true;
       }
     } catch (err) {
-      const message = err.response?.data?.message || 'Erro ao registrar usuário.';
+      let message = err.response?.data?.message;
+      if (!message) {
+        if (!err.response || err.code === 'ERR_NETWORK') {
+          message = 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
+        } else if (err.response?.status >= 500) {
+          message = 'Erro interno do servidor. Tente novamente mais tarde.';
+        } else {
+          message = 'Erro ao registrar usuário.';
+        }
+      }
       setError(message);
-      throw new Error(message, { cause: err });
+      const customErr = new Error(message);
+      customErr.status = err.response?.status;
+      customErr.response = err.response;
+      customErr.code = err.code;
+      throw customErr;
     } finally {
       setLoading(false);
     }
