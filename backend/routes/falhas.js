@@ -1394,10 +1394,35 @@ export default function createFalhasRouter(prisma, protect) {
         updateData.observacao = input.observacao;
       }
 
-      const resultado = await prisma.falhas_registros.updateMany({
-        where: { id: { in: input.ids } },
-        data: updateData
-      });
+      let resultado;
+      try {
+        resultado = await prisma.falhas_registros.updateMany({
+          where: { id: { in: input.ids } },
+          data: updateData
+        });
+      } catch (prismaError) {
+        if (String(prismaError?.message || '').includes('usuario_contato')) {
+          console.warn('[falhas/registros-massa] usuario_contato não reconhecido no client Prisma; aplicando fallback.');
+          const { usuario_contato, ...dataSemUsuario } = updateData;
+          resultado = await prisma.falhas_registros.updateMany({
+            where: { id: { in: input.ids } },
+            data: dataSemUsuario
+          });
+          if (usuario_contato) {
+            try {
+              await prisma.$executeRawUnsafe(
+                `UPDATE "falhas_registros" SET "usuario_contato" = $1 WHERE "id" = ANY($2::uuid[])`,
+                usuario_contato,
+                input.ids
+              );
+            } catch (rawErr) {
+              console.warn('[falhas/registros-massa] Fallback raw update usuario_contato aviso:', rawErr.message);
+            }
+          }
+        } else {
+          throw prismaError;
+        }
+      }
       clearLoteStaticCache();
 
       recordAuditEvent({
@@ -1418,6 +1443,7 @@ export default function createFalhasRouter(prisma, protect) {
         data: { count: resultado.count }
       });
     } catch (error) {
+      console.error('[ERRO REGISTROS-MASSA]:', error);
       next(error);
     }
   });

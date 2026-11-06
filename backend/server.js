@@ -286,10 +286,23 @@ const generateSlug = (text) => {
     .replace(/-+$/, '');
 };
 
+const passwordSchema = z.string()
+  .min(6, 'A senha deve ter no mínimo 6 caracteres.')
+  .max(128, 'A senha não pode ter mais de 128 caracteres.')
+  .refine((val) => /[A-Z]/.test(val), {
+    message: 'A senha deve conter pelo menos 1 letra maiúscula.'
+  })
+  .refine((val) => /[a-z]/.test(val), {
+    message: 'A senha deve conter letras minúsculas.'
+  })
+  .refine((val) => /[^A-Za-z0-9]/.test(val), {
+    message: 'A senha deve conter pelo menos 1 caractere especial (!@#$%...).'
+  });
+
 // Zod Validation Schemas
 const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email('E-mail inválido'),
-  password: z.string().min(12, 'A senha deve ter no mínimo 12 caracteres').max(128),
+  password: passwordSchema,
   name: z.string().trim().min(2, 'O nome deve ter no mínimo 2 caracteres').max(120),
   role: z.enum(['USER', 'ADMIN']).optional(),
   can_access_gestao_solar: z.boolean().optional()
@@ -657,10 +670,11 @@ app.put('/api/users/:id', protect, restrictTo('ADMIN'), async (req, res, next) =
     }
 
     if (password && password.trim().length > 0) {
-      if (password.length < 12 || password.length > 128) {
-        return res.status(400).json({ status: 'error', message: 'A nova senha deve ter entre 12 e 128 caracteres.' });
+      const passResult = passwordSchema.safeParse(password.trim());
+      if (!passResult.success) {
+        return res.status(400).json({ status: 'error', message: passResult.error.errors[0]?.message || 'A senha não atende aos requisitos de segurança.' });
       }
-      dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
+      dataToUpdate.passwordHash = await bcrypt.hash(password.trim(), 12);
     }
 
     if (Object.keys(dataToUpdate).length > 0) {
@@ -1031,11 +1045,11 @@ app.use((err, req, res, next) => {
   console.error(err);
 
   // Zod Validation Error
-  if (err instanceof z.ZodError) {
+  if (err instanceof z.ZodError || err?.name === 'ZodError') {
     return res.status(400).json({
       status: 'error',
       message: 'Erro de validação de dados.',
-      errors: err.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+      errors: Array.isArray(err.errors) ? err.errors.map(e => ({ field: e.path.join('.'), message: e.message })) : []
     });
   }
 

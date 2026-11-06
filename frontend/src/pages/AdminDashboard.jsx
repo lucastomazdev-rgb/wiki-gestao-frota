@@ -144,9 +144,29 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
       toast.error('Preencha nome e e-mail.', 'Formulário Incompleto');
       return;
     }
-    if (!editingUserId && !userPassword) {
+    const pwd = userPassword.trim();
+    if (!editingUserId && !pwd) {
       toast.error('Preencha a senha para cadastrar um novo usuário.', 'Formulário Incompleto');
       return;
+    }
+
+    if (!editingUserId || pwd.length > 0) {
+      if (pwd.length < 6) {
+        toast.error('A senha deve ter no mínimo 6 caracteres.', 'Senha Inválida');
+        return;
+      }
+      if (!/[A-Z]/.test(pwd)) {
+        toast.error('A senha deve conter pelo menos 1 letra maiúscula.', 'Senha Inválida');
+        return;
+      }
+      if (!/[a-z]/.test(pwd)) {
+        toast.error('A senha deve conter letras minúsculas.', 'Senha Inválida');
+        return;
+      }
+      if (!/[^A-Za-z0-9]/.test(pwd)) {
+        toast.error('A senha deve conter pelo menos 1 caractere especial (!@#$%...).', 'Senha Inválida');
+        return;
+      }
     }
 
     setUserSubmitting(true);
@@ -177,7 +197,11 @@ export default function AdminDashboard({ onSelectArticle, onBack, onCategoriesUp
       handleCloseUserModal();
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Falha ao salvar usuário.', 'Erro');
+      const errorMsg =
+        err.response?.data?.errors?.[0]?.message ||
+        err.response?.data?.message ||
+        'Falha ao salvar usuário.';
+      toast.error(errorMsg, 'Erro');
     } finally {
       setUserSubmitting(false);
     }
@@ -1125,15 +1149,15 @@ RESPOSTA: SETIP OK
                       type="password"
                       value={userPassword}
                       onChange={(e) => setUserPassword(e.target.value)}
-                      placeholder={editingUserId ? 'Deixar em branco para manter' : 'Mínimo 6 caracteres'}
+                      placeholder={editingUserId ? 'Deixar em branco para manter' : 'Mín. 6 carac. (Ex: Senha@123)'}
                       className="w-full bg-slate-800/80 border border-white/10 text-white text-sm px-4 py-2.5 rounded-xl outline-none focus:border-amber-500/50 font-sans"
                       required={!editingUserId}
                     />
-                    {editingUserId && (
-                      <span className="text-[11px] text-slate-400 mt-1 block">
-                        Deixe em branco se não quiser alterar a senha.
-                      </span>
-                    )}
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      {editingUserId
+                        ? 'Deixe em branco se não quiser alterar a senha. (Mín. 6 caracteres, com maiúscula, minúscula e caractere especial).'
+                        : 'Requisitos: Mínimo 6 caracteres, ao menos 1 maiúscula, minúsculas e 1 caractere especial.'}
+                    </span>
                   </div>
 
                   <div>
